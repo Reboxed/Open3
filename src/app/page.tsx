@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import ChatInput from "./components/ChatInput";
+import Markdown, { Components } from 'react-markdown';
+import remarkGfm from "remark-gfm";
+
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import rehypeRaw from "rehype-raw";
 
 interface Message {
     role: 'user' | 'assistant';
@@ -11,7 +17,6 @@ interface Message {
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [inputValue, setInputValue] = useState("");
     const eventSourceRef = useRef<EventSource | null>(null);
 
     useEffect(() => {
@@ -29,7 +34,6 @@ export default function Home() {
         const userMessage: Message = { role: 'user', content: message};
         setMessages(prev => [...prev, userMessage]);
 
-        setInputValue("");
         setIsLoading(true);
         if (eventSourceRef.current) {
             eventSourceRef.current.close();
@@ -66,24 +70,40 @@ export default function Home() {
         });
     }
 
-    return (
-        <div className="min-w-full min-h-full flex flex-col gap-4 justify-between items-center p-4">
-            <div className="w-full max-h-full">{messages.map((message) => {
-                return (
-                    message.role === 'user' ? (
-                        <div key={Math.random()} className="p-2 rounded-lg mb-2">
-                            <strong>You</strong><br/>
-                            {message.content}
-                        </div>
-                    ) : (
-                        <div key={Math.random()} className="p-2 rounded-lg mb-2">
-                            <strong>Assistant</strong><br/>
-                            {message.content}
-                        </div>
-                    )
+    const markdownComponents: Components = {
+        code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+
+            return !inline && match ? (
+                <SyntaxHighlighter style={oneDark} language={match[1]} {...props}>
+                    {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+            ) : (
+                    <code className={className} {...props}>
+                        {children}
+                    </code>
                 );
-            })}</div>
-            <ChatInput onSend={onSend} loading={isLoading} onInput={(msg) => setInputValue(msg)} value={inputValue} />
+        },
+    }
+
+    return (
+        <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6">
+            <div className="w-[800px] max-h-full grid gap-4 grid-cols-[0.1fr_0.9fr]">
+                {messages.map((message) => {
+                    return (
+                        message.role === 'user' ? (
+                            <div key={Math.random()} className="px-6 py-4 rounded-2xl bg-white/[0.06] mb-2 col-start-2 justify-self-end">
+                                <Markdown components={markdownComponents} rehypePlugins={rehypeRaw} remarkPlugins={remarkGfm}>{message.content}</Markdown>
+                            </div>
+                        ) : (
+                                <div key={Math.random()} className="p-2 mb-2 col-span-2">
+                                    <Markdown components={markdownComponents} rehypePlugins={rehypeRaw} remarkPlugins={remarkGfm}>{message.content}</Markdown>
+                                </div>
+                            )
+                    );
+                })}
+            </div>
+            <ChatInput onSend={onSend} loading={isLoading} />
         </div>
     );
 }
