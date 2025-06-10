@@ -12,6 +12,12 @@
     --font-mono: var(--font-geist-mono);
     --color-primary: #7d64d1;
     --color-primary-light: #ac95fc;
+
+    --shadow-active-button: inset 0px 6px 13px 0px rgba(255,255,255,0.18), inset 0px -6px 13px 0px rgba(0,0,0,0.35), 0px 3px 8px 0px rgba(0,0,0,0.25);
+    --shadow-inactive-button: inset 0 0 35px rgba(0,0,0,0.25);
+
+    --shadow-highlight: inset 0px 0px 3px 0px rgba(0,0,0,0.32), 0px 0px 8px 0px rgba(0,0,0,0.32);
+    --shadow-highlight-sm: inset 0px 0px 1px 0px rgba(0,0,0,0.32), 0px 0px 3px 0px rgba(0,0,0,0.32);
 }
 
 @media (prefers-color-scheme: dark) {
