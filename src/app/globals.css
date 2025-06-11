@@ -13,11 +13,11 @@
     --color-primary: #7d64d1;
     --color-primary-light: #ac95fc;
 
-    --shadow-active-button: inset 0px 6px 13px 0px rgba(255,255,255,0.18), inset 0px -6px 13px 0px rgba(0,0,0,0.35), 0px 3px 8px 0px rgba(0,0,0,0.25);
-    --shadow-inactive-button: inset 0 0 35px rgba(0,0,0,0.25);
+    --shadow-active-button: inset 0px 6px 13px 0px rgba(255, 255, 255, 0.18), inset 0px -6px 13px 0px rgba(0, 0, 0, 0.35), 0px 3px 8px 0px rgba(0, 0, 0, 0.25);
+    --shadow-inactive-button: inset 0 0 35px rgba(0, 0, 0, 0.25);
 
-    --shadow-highlight: inset 0px 0px 8px 0px rgba(0,0,0,0.12), 0px 0px 18px 0px rgba(0,0,0,0.32);
-    --shadow-highlight-sm: inset 0px 0px 1px 0px rgba(0,0,0,0.32), 0px 0px 3px 0px rgba(0,0,0,0.32);
+    --shadow-highlight: inset 0px 0px 8px 0px rgba(0, 0, 0, 0.12), 0px 0px 18px 0px rgba(0, 0, 0, 0.32);
+    --shadow-highlight-sm: inset 0px 0px 1px 0px rgba(0, 0, 0, 0.32), 0px 0px 3px 0px rgba(0, 0, 0, 0.32);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,32 +27,47 @@
     }
 }
 
-ul:not(:has(>li>input[type="checkbox"]:first-child)) {
+iframe.md,
+img.md {
+    @apply overflow-clip rounded-2xl my-3 shadow-highlight;
+}
+
+ul.md:not(:has(>li>input[type="checkbox"]:first-child)) {
     list-style: initial;
 }
-ol {
+
+ol.md {
     list-style: decimal;
 }
-li, ul {
+
+li.md,
+ul.md {
     @apply my-3;
 }
-li:not(:first-child:has(>input[type="checkbox"]:first-child)) {
+
+li.md:not(:first-child:has(>input[type="checkbox"]:first-child)) {
     margin-left: 16px;
 }
+
 table {
     @apply w-full text-sm text-left rtl:text-right overflow-clip rounded-2xl;
     @apply shadow-highlight my-5;
 }
+
 thead {
     @apply text-xs uppercase dark:bg-white/[0.08] border-b-1 border-black/[0.93] font-semibold;
 }
-tbody > tr {
+
+tbody>tr {
     @apply bg-white dark:bg-white/[0.04] border-gray-200;
 }
-tbody > th {
+
+tbody>th {
     @apply px-6 py-4 font-medium whitespace-nowrap;
 }
-th, td {
+
+th,
+td {
     @apply px-6 py-4;
 }
 
@@ -60,58 +75,78 @@ blockquote {
     padding-left: 24px;
     @apply my-2 py-1.5 relative text-neutral-400;
 }
+
 blockquote::before {
     content: "";
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    border: 3px solid rgba(255,255,255,0.15);
+    border: 3px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px;
     z-index: -1;
 }
+
 blockquote>blockquote {
     @apply my-2.5;
 }
+
 *:not(pre)>code {
     @apply bg-black/10 shadow-inactive-button;
     @apply py-1 px-2 rounded-lg;
 }
+
 *:not(pre):has(>code) {
     @apply my-1.5;
 }
+
 pre:has(>code) {
     @apply !bg-black/10 !shadow-inactive-button flex !items-stretch;
     @apply !py-3 !px-5 !my-3 !border !border-white/5 !rounded-2xl;
 }
+
 pre>code {
     @apply overflow-x-auto !bg-transparent;
 }
+
 hr {
     @apply my-4;
     @apply text-white/20;
 }
-h1, h2, h3, h4, h5, h6 {
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     @apply mb-2.5 mt-2 font-bold;
 }
+
 h1 {
     @apply text-3xl;
 }
+
 h2 {
     @apply text-2xl;
 }
+
 h3 {
     @apply text-xl;
 }
+
 h4 {
     @apply text-lg;
 }
+
 h5 {
     @apply text-base;
 }
+
 h6 {
     @apply text-sm;
 }
+
 a {
     color: var(--color-primary-light);
     text-decoration-line: underline;

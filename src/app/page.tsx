@@ -9,6 +9,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css'; // Change to preferred style
 import rehypeLineNumbers from "./lib/utils/rehypeLineNumbers";
 import { Message } from "./lib/types/ai";
+import rehypeClassAll from "./lib/utils/rehypeClassAll";
 
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -93,7 +94,7 @@ const MessageBubble = ({ message }: { message: Message }) => {
 
     return (
         <div className={className}>
-            <Markdown rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeLineNumbers]} remarkPlugins={[remarkGfm]}>
+            <Markdown rehypePlugins={[rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]]} remarkPlugins={[remarkGfm]}>
                 {message.parts[0].text}
             </Markdown>
         </div>

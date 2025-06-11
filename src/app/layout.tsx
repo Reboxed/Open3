@@ -11,7 +11,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Suspense } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { dark } from "@clerk/themes";
 
@@ -39,20 +38,39 @@ export default function RootLayout({
         <ClerkProvider>
             <html lang="en">
                 <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen h-full w-full max-sm:text-sm`}>
-                    <Suspense fallback={<LoadingUserComponent/>}>
-                        <div className="h-fit w-full p-3.5 px-8 transition-all border-white/0 border-1 sticky top-0 z-20 bg-white/5 backdrop-blur-2xl">
-                            <SignedIn>
-                                <UserComponent />
-                            </SignedIn>
-                            <SignedOut>
-                                <div className="flex gap-4">
-                                    <SignInButton />
-                                    <SignUpButton />
-                                </div>
-                            </SignedOut>
+                    <div className="h-fit flex gap-2 pt-4 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+                        <div className="pb-2 pt-3 px-8 w-fit rounded-t-2xl text-primary-light hover:bg-[#191919]/75 cursor-pointer font-medium transition-all duration-300">
+                            <Link href="/" className="!no-underline">
+                                Open3 Chat
+                            </Link>
                         </div>
-                    </Suspense>
-                    <div className="w-full min-h-full absolute top-12 bottom-0">
+                        <div className="pb-2 pt-3 px-6 w-fit cursor-pointer rounded-t-2xl bg-[#191919] font-bold flex justify-center items-center gap-12 relative overflow-visible transition-all duration-300">
+                            Test Chat
+                            <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75"/>
+                            </svg>
+                        </div>
+                        <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 flex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
+                            Discord.JS bot
+                        </div>
+                        <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 lex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
+                            Markdown show-off
+                        </div>
+                        <div className="pl-4 pr-6 h-full w-fit ml-auto">
+                            <Suspense fallback={<LoadingUserComponent/>}>
+                                <SignedIn>
+                                    <UserComponent />
+                                </SignedIn>
+                                <SignedOut>
+                                    <div className="flex gap-4">
+                                        <SignInButton />
+                                        <SignUpButton />
+                                    </div>
+                                </SignedOut>
+                            </Suspense>
+                        </div>
+                    </div>
+                    <div className="w-full min-h-full absolute top-[64px] bottom-0">
                         {children}
                     </div>
                 </body>
@@ -64,11 +82,7 @@ export default function RootLayout({
 function LoadingUserComponent() {
     return (
         <div className="flex gap-4 items-center">
-            <span className="text-transparent w-[36px] h-[36px] rounded-full bg-white/15">.</span>
-            <div className="flex flex-col gap-1">
-                <span className="text-xs text-white/50 font-light">Hey there,</span>
-                <span className="font-medium text-white/50">Loading...</span>
-            </div>
+            <span className="text-transparent w-[28px] h-[28px] rounded-full bg-white/15">.</span>
         </div>
     )
 }
@@ -101,7 +115,6 @@ async function UserComponent() {
                         }
                     }}/> 
                     {/*user.hasImage ? <Image src={user.imageUrl} width={36} height={36} alt="Profile Picture" className="rounded-full" /> : <></>*/}
-                    <span className="font-medium">{user.fullName ?? user.username}</span>
                 </div>
             </SignedIn>
         </>

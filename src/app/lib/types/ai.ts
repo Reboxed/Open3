@@ -57,9 +57,9 @@ export class GeminiChat implements Chat {
                             text: fullResponse,
                         }]
                     });
-                    
+
                     controller.close();
-                } catch(error) {
+                } catch (error) {
                     controller.error(error);
                 }
             },
