@@ -2,41 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import ChatInput from "./components/ChatInput";
-import Markdown, { Components } from 'react-markdown';
+import Markdown from 'react-markdown';
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css'; // Change to preferred style
 import rehypeLineNumbers from "./lib/utils/rehypeLineNumbers";
-
-interface Message {
-    role: 'user' | 'assistant';
-    content: string;
-}
-
-const MemoizedCodeBlock = React.memo(function CodeBlock({
-    language,
-    value,
-}: {
-    language: string;
-    value: string;
-}) {
-    const codeRef = useRef<HTMLElement>(null);
-
-    useEffect(() => {
-        if (codeRef.current) {
-            hljs.highlightElement(codeRef.current);
-        }
-    }, [value]); // Re-highlight when value changes
-
-    return (
-        <pre>
-            <code ref={codeRef} className={`language-${language}`}>
-                {value}
-            </code>
-        </pre>
-    );
-});
+import { Message } from "./lib/types/ai";
 
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -55,7 +27,7 @@ export default function Home() {
     }, [messages]);
 
     function onSend(message: string) {
-        const userMessage: Message = { role: 'user', content: message };
+        const userMessage: Message = { role: 'user', parts: [{text: message}] };
         setMessages(prev => [...prev, userMessage]);
 
         setIsLoading(true);
@@ -63,22 +35,21 @@ export default function Home() {
             eventSourceRef.current.close();
         }
 
-        const eventSource = new EventSource(`/api/generation/gemini?prompt=${encodeURIComponent(message)}`);
+        const eventSource = new EventSource(`/api/generation/chat?prompt=${encodeURIComponent(message)}&id=test`);
         eventSourceRef.current = eventSource;
 
         let assistantMessage = '';
-
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            assistantMessage += data.text;
+            assistantMessage += data.candidates[0].content.parts[0].text;
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'assistant') {
-                    lastMessage.content = assistantMessage;
+                if (lastMessage.role === 'model') {
+                    lastMessage.parts = [{ text: assistantMessage }];
                     return [...newMessages];
                 } else {
-                    return [...newMessages, { role: 'assistant', content: assistantMessage }];
+                    return [...newMessages, { role: 'model', parts: [{text: assistantMessage}] } as Message];
                 }
             });
         };
@@ -106,24 +77,6 @@ export default function Home() {
     );
 }
 
-const MarkdownComponents: Components = {
-    code({ node, inline, className, children, ...props }: any) {
-        const match = /language-(\w+)/.exec(className || '');
-        const language = match?.[1] || '';
-
-        return !inline && language ? (
-            <MemoizedCodeBlock
-                language={language}
-                value={String(children).replace(/\n$/, '')}
-            />
-        ) : (
-            <code className={className} {...props}>
-                {children}
-            </code>
-        );
-    },
-};
-
 const MessageBubble = ({ message }: { message: Message }) => {
     const isUser = message.role === 'user';
     const className = isUser
@@ -133,7 +86,7 @@ const MessageBubble = ({ message }: { message: Message }) => {
     return (
         <div className={className}>
             <Markdown rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeLineNumbers]} remarkPlugins={[remarkGfm]}>
-                {message.content}
+                {message.parts[0].text}
             </Markdown>
         </div>
     );
