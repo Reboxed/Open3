@@ -73,11 +73,11 @@ blockquote::before {
 blockquote>blockquote {
     @apply my-2.5;
 }
-p>code {
+*:not(pre)>code {
     @apply bg-black/10 shadow-inactive-button;
     @apply py-1 px-2 rounded-lg;
 }
-p:has(>code) {
+*:not(pre):has(>code) {
     @apply my-1.5;
 }
 pre:has(>code) {
