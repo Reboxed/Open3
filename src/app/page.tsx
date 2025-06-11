@@ -12,6 +12,7 @@ import { Message } from "./lib/types/ai";
 
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
+    const messagesRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(false);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -24,10 +25,17 @@ export default function Home() {
 
     useEffect(() => {
         localStorage.setItem("geminiMessages", JSON.stringify(messages));
+        const messagesElement = messagesRef.current;
+        if (messagesElement) {
+            window.scrollTo({
+                behavior: "smooth",
+                top: messagesElement.scrollHeight,
+            })
+        }
     }, [messages]);
 
     function onSend(message: string) {
-        const userMessage: Message = { role: 'user', parts: [{text: message}] };
+        const userMessage: Message = { role: 'user', parts: [{ text: message }] };
         setMessages(prev => [...prev, userMessage]);
 
         setIsLoading(true);
@@ -49,7 +57,7 @@ export default function Home() {
                     lastMessage.parts = [{ text: assistantMessage }];
                     return [...newMessages];
                 } else {
-                    return [...newMessages, { role: 'model', parts: [{text: assistantMessage}] } as Message];
+                    return [...newMessages, { role: 'model', parts: [{ text: assistantMessage }] } as Message];
                 }
             });
         };
@@ -66,13 +74,13 @@ export default function Home() {
     }
 
     return (
-        <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6">
-            <div className="w-[800px] max-h-full grid gap-4 grid-cols-[0.1fr_0.9fr]">
+        <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6 gap-8">
+            <div className="w-[50%] max-h-full grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
                 {messages.map((message, idx) => (
                     <MessageBubble key={`${message.role}-${idx}`} message={message} />
                 ))}
             </div>
-            <ChatInput onSend={onSend} loading={isLoading} />
+            <ChatInput onSend={onSend} loading={isLoading} className="w-[50%]" />
         </div>
     );
 }
