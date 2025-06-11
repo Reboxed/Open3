@@ -75,12 +75,12 @@ export default function Home() {
 
     return (
         <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6 gap-8">
-            <div className="w-[50%] max-h-full grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
+            <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full grid gap-4 grid-cols-[1fr_0.9fr]" ref={messagesRef}>
                 {messages.map((message, idx) => (
                     <MessageBubble key={`${message.role}-${idx}`} message={message} />
                 ))}
             </div>
-            <ChatInput onSend={onSend} loading={isLoading} className="w-[50%]" />
+            <ChatInput onSend={onSend} loading={isLoading} className="w-[80%] max-w-[1000px] max-md:w-[90%]" />
         </div>
     );
 }
