@@ -9,7 +9,7 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
     const eventSourceRef = useRef<EventSource | null>(null);
 
-    function onSend(message: string) {
+    function onSend(message: string) { 
         
     }
 
