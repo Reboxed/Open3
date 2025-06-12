@@ -10,42 +10,7 @@ export default function Home() {
     const eventSourceRef = useRef<EventSource | null>(null);
 
     function onSend(message: string) {
-        /* const userMessage: Message = { role: 'user', parts: [{ text: message }] };
-        setMessages(prev => [...prev, userMessage]);
-
-        setIsLoading(true);
-        if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-        }
-
-        const eventSource = new EventSource(`/api/generation/chat?prompt=${encodeURIComponent(message)}&id=test`);
-        eventSourceRef.current = eventSource;
-
-        let assistantMessage = '';
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            assistantMessage += data.candidates[0].content.parts[0].text;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
-                    lastMessage.parts = [{ text: assistantMessage }];
-                    return [...newMessages];
-                } else {
-                    return [...newMessages, { role: 'model', parts: [{ text: assistantMessage }] } as Message];
-                }
-            });
-        };
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            setIsLoading(false);
-        };
-
-        eventSource.addEventListener('done', () => {
-            eventSource.close();
-            setIsLoading(false);
-        }); */
+        
     }
 
     return (

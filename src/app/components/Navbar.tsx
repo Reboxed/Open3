@@ -6,7 +6,7 @@ import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@cl
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { dark } from "@clerk/themes";
 
-export function Navbar({ tabs }: { tabs: Tab[] }) {
+export function Navbar({ tabs }: { tabs: Tab[] }) {
     return (
         <nav className="h-fit flex gap-2 pt-4 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
             {/* <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">

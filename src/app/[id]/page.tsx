@@ -50,7 +50,7 @@ export default function Chat() {
             eventSourceRef.current.close();
         }
 
-        const eventSource = new EventSource(`/api/generation/chat?prompt=${encodeURIComponent(message)}&id=${chatId}`);
+        const eventSource = new EventSource(`/api/chat?prompt=${encodeURIComponent(message)}&id=${chatId}`);
         eventSourceRef.current = eventSource;
 
         let assistantMessage = '';
