@@ -68,7 +68,7 @@ export class GeminiChat implements Chat {
     }
 
     async send(message: Message): Promise<string> {
-        return ""
+        return message.parts[0].text ?? ""
     }
 
     getHistory(): Message[] {

@@ -1,33 +1,41 @@
-// rehype-class-all.js
-
 import { visit } from 'unist-util-visit';
+import type { Root, Properties } from 'hast';
+import type { Plugin } from 'unified';
 
-function rehypeClassAll(options: { className?: string } = {}) {
-  const className = options.className || 'md'; // Default class name
+interface Options {
+    className?: string;
+    onError?: string
+}
 
-  return (tree: any) => {
-    visit(tree, (node) => {
-      if (node.type === 'element') {
-        if (node.properties) {
-          if (node.properties.className) {
-            if (Array.isArray(node.properties.className)) {
-              if (!node.properties.className.includes(className)) {
-                node.properties.className.push(className);
-              }
-            } else if (typeof node.properties.className === 'string') {
-              if (!node.properties.className.split(' ').includes(className)) {
-                node.properties.className += ' ' + className;
-              }
+const rehypeClassAll: Plugin<[Options?], Root> = (options = {}) => {
+    const className = options.className || 'md'; // Default class name
+
+    return (tree: Root) => {
+        visit(tree, (node) => {
+            if (node.type === 'element') {
+                if (node.properties) {
+                    const props = node.properties as Properties;
+
+                    if (props.onError) delete node.properties.onError;
+                    if (props.className) {
+                        if (Array.isArray(node.properties.className)) {
+                            if (!JSON.stringify(props.className).includes(className)) {
+                                node.properties.className.push(className);
+                            }
+                        } else if (typeof props.className === 'string') {
+                            if (!props.className.split(' ').includes(className)) {
+                                node.properties.className += ' ' + className;
+                            }
+                        }
+                    } else {
+                        node.properties.className = [className];
+                    }
+                } else {
+                    node.properties = { className: [className] };
+                }
             }
-          } else {
-            node.properties.className = [className];
-          }
-        } else {
-          node.properties = { className: [className] };
-        }
-      }
-    });
-  };
+        });
+    };
 }
 
 export default rehypeClassAll;

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 //const DEBUG_TABS = true; // Set to true to enable debug tabs for development purposes
@@ -7,21 +9,24 @@ import { useEffect, useState } from 'react';
 export type Tab = {
     id: string;
     label: string;
+    link: string;
     permanent?: boolean;
 }
 
 export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabChange?: (tabId: string) => void, onNewTab?: () => void, tabs?: Tab[] }) {
+    const params = useParams();
     const [initialTabs, setInitialTabs] = useState<Tab[]>(tabs ?? []);
     const [activeTab, setActiveTab] = useState(tabs?.[0].id ?? "");
 
     useEffect(() => {
+        if (tabs?.find(tab => tab.link == params.id))
         if (tabs && tabs.length > 0) {
             setInitialTabs(tabs);
         } else {
             setInitialTabs([]);
             setActiveTab("");
         }
-    }, [tabs]);
+    }, [tabs, params]);
 
     const closeTab = (tabId: string) => {
         const tabIndex = (tabs ?? []).findIndex((tab) => tab.id === tabId);
@@ -73,19 +78,6 @@ export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabCha
                     border-radius: 16px 16px 0 0;
                 }
                 
-                .tab-inactive:not(:first-of-type):not(:hover)::after {
-                    content: '';
-                    position: absolute;
-                    bottom: 50%;
-                    transform: translateY(50%);
-                    right: 2px;
-                    width: 2px;
-                    height: 50%;
-                    background: rgba(255,255,255,0.1);
-                    border-radius: 999px;
-                    transition: colors 200ms;
-                }
-
                 .tab-inactive:hover::before,
                 .tab-inactive:hover::after {
                     content: '';
@@ -99,51 +91,52 @@ export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabCha
                 .tab-inactive:hover::before {
                     left: -16px;
                     border-bottom-right-radius: 16px;
-                    box-shadow: 4px 4px 0 rgba(25, 25, 25, 0.65);
+                    box-shadow: 4px 4px 0 rgba(25, 25, 25, 0.40);
                 }
                 
                 .tab-inactive:hover::after {
                     right: -16px;
                     border-bottom-left-radius: 16px;
-                    box-shadow: -4px 4px 0 rgba(25, 25, 25, 0.65);
+                    box-shadow: -4px 4px 0 rgba(25, 25, 25, 0.40);
                 }
             `}</style>
 
-            <div className="flex flex-1 items-center gap-2 h-full">
+            <div className="flex flex-1 items-stretch gap-2 h-full">
                 {initialTabs.map((tab) => (
-                    <div
-                        key={tab.id}
-                        className={`
+                    <Link className="!no-underline flex" href={tab.link} key={tab.id}>
+                        <div
+                            className={`
                             relative flex items-center
                             gap-12 px-4 pl-5 py-3 
                             ${tab.permanent ? "!px-[calc((48px+16px)/2)]" : ""} cursor-pointer rounded-t-2xl font-medium
                             transition-all duration-200
                             ${activeTab === tab.id ?
-                                `tab-active z-10 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
-                                `tab-inactive hover:bg-[#191919]/60 ${!tab.permanent ? "text-neutral-200/65" : "text-primary-light/65 !font-bold"}`
-                            }
+                                    `tab-active z-10 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
+                                    `tab-inactive hover:bg-[#191919]/60 ${!tab.permanent ? "text-neutral-200/65" : "text-primary-light/65 !font-bold"}`
+                                }
                         `}
-                        onClick={() => setActiveTab(tab.id)}
-                    >
-                        <span className="text-sm select-none whitespace-nowrap">
-                            {tab.label}
-                        </span>
+                            onClick={() => setActiveTab(tab.id)}
+                        >
+                            <span className="text-sm select-none whitespace-nowrap">
+                                {tab.label}
+                            </span>
 
-                        {!tab.permanent && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); closeTab(tab.id); onTabChange?.(tab.id) }}
-                                className="p-1 rounded cursor-pointer hover:bg-white/10 transition-opacity duration-200"
-                            >
-                                <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
-                                </svg>
-                            </button>
-                        )}
-                    </div>
+                            {!tab.permanent && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); onTabChange?.(tab.id) }}
+                                    className="p-1 rounded cursor-pointer hover:bg-white/10 transition-opacity duration-200"
+                                >
+                                    <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                    </Link>
                 ))}
 
-                <button onClick={onNewTab} className="flex items-center justify-center w-8 h-8 mt-1 ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors duration-200">
-                    <span className="text-lg leading-none">+</span>
+                <button onClick={onNewTab} className="flex items-center justify-center w-8 h-8 mt-1 ml-2 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
+                    <span className="text-3xl font-light hover:text-white !text-neutral-200/50 leading-none">+</span>
                 </button>
             </div>
         </>

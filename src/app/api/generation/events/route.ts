@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
                 controller.close();
             } catch (error) {
                 // Send error as SSE event
-                const errData = `data: {"error": true, "message": "${error.message || error}"}\n\n`;
+                const errData = `data: {"error": true, "message": "${(error as Error).message || error}"}\n\n`;
                 controller.enqueue(new TextEncoder().encode(errData));
                 controller.close();
             }

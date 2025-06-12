@@ -12,7 +12,6 @@ import TabInterface from "./components/TabInterface";
 import "./globals.css";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Suspense } from "react";
-import Link from "next/link";
 import { dark } from "@clerk/themes";
 
 const geistSans = Geist({
@@ -39,7 +38,7 @@ export default function RootLayout({
         <ClerkProvider>
             <html lang="en">
                 <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen h-full w-full max-sm:text-sm`}>
-                    <div className="h-fit flex gap-2 pt-4 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+                    <nav className="h-fit flex gap-2 pt-3 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
                         {/* <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">
                             <div className="pb-2 pt-3 px-8 w-fit rounded-t-2xl text-primary-light hover:bg-[#191919]/75 cursor-pointer font-medium transition-all duration-300">
                                 <Link href="/" className="!no-underline">
@@ -58,11 +57,11 @@ export default function RootLayout({
                             <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 lex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
                                 Markdown show-off
                             </div> */}
-                        <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">
+                        <div className="relative shrink-0 flex gap-2 w-full justify-center">
                             <TabInterface tabs={[
-                                { id: "home", label: "Open3", permanent: true },
-                                { id: "pygame-chat", label: "Pygame Chat" },
-                                { id: "other-chat", label: "Other Chat" },
+                                { id: "home", label: "Open3", link: "/", permanent: true },
+                                { id: "pygame-chat", label: "Pygame Chat", link: "/pygame-chat" },
+                                { id: "other-chat", label: "Other Chat", link: "/sth-chat" },
                             ]} />
                             <div className="pl-4 pr-6 h-full w-fit ml-auto">
                                 <Suspense fallback={<LoadingUserComponent />}>
@@ -79,7 +78,7 @@ export default function RootLayout({
                             </div>
                         </div>
                         {/* </div> */}
-                    </div>
+                    </nav>
                     <div className="w-full min-h-full absolute top-[64px] bottom-0">
                         {children}
                     </div>
