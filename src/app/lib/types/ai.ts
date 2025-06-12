@@ -6,17 +6,21 @@ export interface Message {
 }
 
 export interface Chat {
-    chatId: string;
+    id: string;
+    label?: string;
     model: string;
+    provider: string;
     sendStream(message: Message): Promise<ReadableStream>;
     send(message: Message): Promise<string>;
     getHistory(): Message[];
 }
 
 export class GeminiChat implements Chat {
-    chatId: string = "";
+    id: string = "";
     model: string;
-    ai: GoogleGenAI;
+    provider: string = "google";
+    label?: string;
+    private ai: GoogleGenAI;
     private history: Content[] = [];
 
     constructor(history: Message[], model: string) {

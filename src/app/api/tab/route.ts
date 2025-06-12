@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/route";
+import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/[userId]/route";
 
 export interface ApiError {
     error: string;
@@ -15,7 +15,6 @@ interface CreateTabResponse {
 
 interface CreateTabRequest {
     label: string;
-    userId: string;
     chatId?: string; // Optional, if associating with an existing chat
     chatProperties?: CreateChatRequest; // Optional, if creating a new chat
 }
@@ -29,7 +28,8 @@ interface ApiTab {
 
 const tabsOfUser = new Map<string, Map<string, ApiTab>>();
 export async function POST(req: NextApiRequest, res: NextApiResponse<CreateTabResponse | ApiError>) {
-    const { label, chatId, userId, chatProperties } = await req.body as CreateTabRequest;
+    const userId = req.query["user_id"] as string;
+    const { label, chatId, chatProperties } = await req.body as CreateTabRequest;
     const doCreateChat = req.query["create"];
     if (!label) {
         return res.status(400).json({ error: "ID and label are required" });
@@ -45,7 +45,7 @@ export async function POST(req: NextApiRequest, res: NextApiResponse<CreateTabRe
         }
 
         try {
-            result = await createChat(chatProperties);
+            result = await createChat(userId, chatProperties);
         } catch (error) {
             return res.status(500).json({ error: "Failed to create chat" });
         }
@@ -77,7 +77,8 @@ export async function GET(req: NextApiRequest, res: NextApiResponse<ApiTab[] | A
 }
 
 export async function DELETE(req: NextApiRequest, res: NextApiResponse<ApiError | { success: boolean }>) {
-    const { id, userId } = await req.body as { id: string; userId: string };
+    const userId = req.query["user_id"] as string;
+    const { id } = await req.body as { id: string; userId: string };
     if (!id || !userId) {
         return res.status(400).json({ error: "ID and user ID are required" });
     }
