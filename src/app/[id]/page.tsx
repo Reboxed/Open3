@@ -2,13 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import ChatInput from "../components/ChatInput";
-import Markdown from 'react-markdown';
+import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
-import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github-dark.css'; // Change to preferred style
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css"; // Change to preferred style
 import { Message } from "../lib/types/ai";
-import { escape } from 'html-escaper';
+import { escape } from "html-escaper";
 import rehypeClassAll from "../lib/utils/rehypeClassAll";
 import { useParams } from "next/navigation";
 
@@ -42,29 +42,28 @@ export default function Chat() {
     }, [messages, chatId]);
 
     function onSend(message: string) {
-        const userMessage: Message = { role: 'user', parts: [{ text: message }] };
+        const userMessage: Message = { role: "user", parts: [{ text: message }] };
         setMessages(prev => [...prev, userMessage]);
-
         setIsLoading(true);
-        if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-        }
+
+        if (eventSourceRef.current?.OPEN) return;
+        if (eventSourceRef.current) eventSourceRef.current.close();
 
         const eventSource = new EventSource(`/api/chat?prompt=${encodeURIComponent(message)}&id=${chatId}`);
         eventSourceRef.current = eventSource;
 
-        let assistantMessage = '';
+        let assistantMessage = "";
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
             assistantMessage += data.candidates[0].content.parts[0].text;
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
+                if (lastMessage.role === "model") {
                     lastMessage.parts = [{ text: assistantMessage }];
                     return [...newMessages];
                 } else {
-                    return [...newMessages, { role: 'model', parts: [{ text: assistantMessage }] } as Message];
+                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
                 }
             });
         };
@@ -74,7 +73,7 @@ export default function Chat() {
             setIsLoading(false);
         };
 
-        eventSource.addEventListener('done', () => {
+        eventSource.addEventListener("done", () => {
             eventSource.close();
             setIsLoading(false);
         });
@@ -93,7 +92,7 @@ export default function Chat() {
 }
 
 const MessageBubble = ({ message }: { message: Message }) => {
-    const isUser = message.role === 'user';
+    const isUser = message.role === "user";
     const className = isUser
         ? "px-6 py-4 rounded-2xl bg-white/[0.06] mb-2 col-start-2 justify-self-end"
         : "p-2 mb-2 col-span-2";

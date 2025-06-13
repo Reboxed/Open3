@@ -1,0 +1,54 @@
+.tab-active {
+    position: relative;
+    background: #191919;
+    border-radius: 16px 16px 0 0;
+}
+
+.tab-active::before,
+.tab-active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    background: #00000000;
+}
+
+.tab-active::before {
+    left: -16px;
+    border-bottom-right-radius: 16px;
+    box-shadow: 4px 4px 0 #191919;
+}
+
+.tab-active::after {
+    right: -16px;
+    border-bottom-left-radius: 16px;
+    box-shadow: -4px 4px 0 #191919;
+}
+
+.tab-inactive {
+    position: relative;
+    border-radius: 16px 16px 0 0;
+}
+
+.tab-inactive:hover::before,
+.tab-inactive:hover::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    background: #00000000;
+}
+
+.tab-inactive:hover::before {
+    left: -16px;
+    border-bottom-right-radius: 16px;
+    box-shadow: 4px 4px 0 rgba(25, 25, 25, 0.40);
+}
+
+.tab-inactive:hover::after {
+    right: -16px;
+    border-bottom-left-radius: 16px;
+    box-shadow: -4px 4px 0 rgba(25, 25, 25, 0.40);
+}
