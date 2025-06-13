@@ -1,11 +1,12 @@
-import { NextApiRequest, NextApiResponse } from "next";
+import { NextApiRequest } from "next";
 import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/[userId]/route";
+import { NextRequest, NextResponse } from "next/server";
 
 export interface ApiError {
     error: string;
 }
 
-interface CreateTabResponse {
+export interface CreateTabResponse {
     id: string;
     label: string;
     userId: string;
@@ -13,13 +14,13 @@ interface CreateTabResponse {
     chatProperties?: CreateChatResponse; // If chatId is provided, this will be null
 }
 
-interface CreateTabRequest {
+export interface CreateTabRequest {
     label: string;
     chatId?: string; // Optional, if associating with an existing chat
     chatProperties?: CreateChatRequest; // Optional, if creating a new chat
 }
 
-interface ApiTab {
+export interface ApiTab {
     id: string;
     label: string;
     userId: string;
@@ -27,27 +28,31 @@ interface ApiTab {
 }
 
 const tabsOfUser = new Map<string, Map<string, ApiTab>>();
-export async function POST(req: NextApiRequest, res: NextApiResponse<CreateTabResponse | ApiError>) {
-    const userId = req.query["user_id"] as string;
-    const { label, chatId, chatProperties } = await req.body as CreateTabRequest;
-    const doCreateChat = req.query["create"];
+export async function POST(req: NextRequest) {
+    const userId = req.nextUrl.searchParams.get("user_id");
+    if (!userId) {
+        return NextResponse.json({ error: "User ID (user_id) is required" }, { status: 400 });
+    }
+
+    const { label, chatId, chatProperties } = await req.json() as CreateTabRequest;
+    const doCreateChat = req.nextUrl.searchParams.get("create");
     if (!label) {
-        return res.status(400).json({ error: "ID and label are required" });
+        return NextResponse.json({ error: "ID and label are required" }, { status: 400 });
     }
 
     let result: CreateChatResponse | undefined;
     if (doCreateChat === "1" || doCreateChat === "true") {
         if (chatId) {
-            return res.status(400).json({ error: "Chat ID must not be provided when creating a new associated chat" });
+            return NextResponse.json({ error: "Chat ID must not be provided when creating a new associated chat" }, { status: 400 });
         }
         if (!chatProperties) {
-            return res.status(400).json({ error: "Chat properties are required when creating a new associated chat" });
+            return NextResponse.json({ error: "Chat properties are required when creating a new associated chat" }, { status: 400 });
         }
 
         try {
             result = await createChat(userId, chatProperties);
         } catch (error) {
-            return res.status(500).json({ error: "Failed to create chat" });
+            return NextResponse.json({ error: "Failed to create chat" }, { status: 200 });
         }
     }
 
@@ -58,40 +63,41 @@ export async function POST(req: NextApiRequest, res: NextApiResponse<CreateTabRe
 
     // Here you would typically save the tab to a database or in-memory store
     // For this example, we will just return the tab as is
-    return res.status(201).json({ id, label, chatId, userId, chatProperties: result });
+    return NextResponse.json({ id, label, chatId, userId, chatProperties: result } as CreateTabResponse, { status: 201 });
 }
 
-export async function GET(req: NextApiRequest, res: NextApiResponse<ApiTab[] | ApiError>) {
-    const userId = req.query["user_id"] as string;
+export async function GET(req: NextRequest) {
+    const userId = req.nextUrl.searchParams.get("user_id");
     if (!userId) {
-        return res.status(400).json({ error: "User ID (user_id) is required" });
+        return NextResponse.json({ error: "User ID (user_id) is required" }, { status: 400 });
     }
 
     const tabs = tabsOfUser.get(userId);
     if (!tabs) {
-        return res.status(404).json([]);
+        return NextResponse.json([], { status: 404 });
     }
 
     const response = Array.from(tabs.values());
-    return res.status(200).json(response);
+    return NextResponse.json(response, { status: 200 });
 }
 
-export async function DELETE(req: NextApiRequest, res: NextApiResponse<ApiError | { success: boolean }>) {
+export async function DELETE(req: NextApiRequest) {
     const userId = req.query["user_id"] as string;
-    const { id } = await req.body as { id: string; userId: string };
+    const { id } = await req.body as { id: string };
     if (!id || !userId) {
-        return res.status(400).json({ error: "ID and user ID are required" });
+        return NextResponse.json({ error: "User ID (user_id) is required" }, { status: 400 });
     }
 
     const tabs = tabsOfUser.get(userId);
     if (!tabs || !tabs.has(id)) {
-        return res.status(404).json({ error: "Tab not found" });
+        return NextResponse.json({ error: "Tab not found " }, { status: 404 });
     }
 
     tabs.delete(id);
     if (tabs.size === 0) {
         tabsOfUser.delete(userId);
     }
+    tabsOfUser.set(userId, tabs);
 
-    return res.status(200).json({ success: true });
+    return NextResponse.json({ success: true }, { status: 200, });
 }

@@ -13,25 +13,25 @@ export type Tab = {
     permanent?: boolean;
 }
 
-export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabChange?: (tabId: string) => void, onNewTab?: () => void, tabs?: Tab[] }) {
+export default function TabInterface({ onTabChange, onNewTab, tabs: initialTabs }: { onTabChange?: (tabId: string) => void, onNewTab?: () => void, tabs?: Tab[] }) {
     const params = useParams();
-    const [initialTabs, setInitialTabs] = useState<Tab[]>(tabs ?? []);
-    const [activeTab, setActiveTab] = useState(tabs?.[0].id ?? "");
+    const [tabs, setTabs] = useState<Tab[]>(initialTabs ?? []);
+    const [activeTab, setActiveTab] = useState(initialTabs?.[0].id ?? "");
 
     useEffect(() => {
-        if (tabs?.find(tab => tab.link == params.id))
-        if (tabs && tabs.length > 0) {
-            setInitialTabs(tabs);
-        } else {
-            setInitialTabs([]);
-            setActiveTab("");
-        }
-    }, [tabs, params]);
+        if (initialTabs?.find(tab => tab.link == params.id))
+            if (initialTabs && initialTabs.length > 0) {
+                setTabs(initialTabs);
+            } else {
+                setTabs([]);
+                setActiveTab("");
+            }
+    }, [initialTabs, params]);
 
-    const closeTab = (tabId: string) => {
-        const tabIndex = (tabs ?? []).findIndex((tab) => tab.id === tabId);
-        const newTabs = (tabs ?? []).filter(tab => tab.id !== tabId);
-        setInitialTabs(newTabs);
+    const closeTab = async (tabId: string) => {
+        const tabIndex = (initialTabs ?? []).findIndex((tab) => tab.id === tabId);
+        const newTabs = (initialTabs ?? []).filter(tab => tab.id !== tabId);
+        setTabs(newTabs);
         if (activeTab === tabId && newTabs.length > 0) {
             if (tabIndex > newTabs.length - 1) {
                 setActiveTab(newTabs[newTabs.length - 1].id);
@@ -39,7 +39,17 @@ export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabCha
                 setActiveTab(newTabs[tabIndex].id);
             }
         }
+        await fetch(`/api/tab?user_id=test`, {
+            method: "DELETE",
+            body: JSON.stringify({
+                chatId: tabId
+            }),
+        });
     };
+
+    async function _onNewTab() {
+        onNewTab?.();
+    }
 
     return (
         // bg-[#191919]
@@ -102,7 +112,7 @@ export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabCha
             `}</style>
 
             <div className="flex flex-1 items-stretch gap-2 h-full">
-                {initialTabs.map((tab) => (
+                {tabs.map((tab) => (
                     <Link className="!no-underline flex" href={tab.link} key={tab.id}>
                         <div
                             className={`
@@ -135,7 +145,7 @@ export default function TabInterface({ onTabChange, onNewTab, tabs }: { onTabCha
                     </Link>
                 ))}
 
-                <button onClick={onNewTab} className="flex items-center justify-center w-8 h-8 mt-1 ml-2 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
+                <button onClick={_onNewTab} className="flex items-center justify-center w-8 h-8 mt-1 ml-2 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
                     <span className="text-3xl font-light hover:text-white !text-neutral-200/50 leading-none">+</span>
                 </button>
             </div>

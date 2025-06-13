@@ -13,6 +13,8 @@ import "./globals.css";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Suspense } from "react";
 import { dark } from "@clerk/themes";
+import querystring from "querystring";
+import { ApiError, ApiTab } from "./api/tab/route";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -29,39 +31,26 @@ export const metadata: Metadata = {
     description: "The Rebxd take on the T3 Chat.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    const tabsReq = await fetch(`http://localhost:3000/api/tab?user_id=${querystring.escape("test")}`);
+    const tabs = await tabsReq.json() as ApiTab[] | ApiError;
+    if ("error" in tabs) {
+        return <span>Something went wrong...</span>
+    }
+
     return (
         <ClerkProvider>
             <html lang="en">
                 <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen h-full w-full max-sm:text-sm`}>
                     <nav className="h-fit flex gap-2 pt-3 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
-                        {/* <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">
-                            <div className="pb-2 pt-3 px-8 w-fit rounded-t-2xl text-primary-light hover:bg-[#191919]/75 cursor-pointer font-medium transition-all duration-300">
-                                <Link href="/" className="!no-underline">
-                                    Open3 Chat
-                                </Link>
-                            </div>
-                            <div className="pb-2 pt-3 px-6 w-fit cursor-pointer rounded-t-2xl bg-[#191919] font-bold flex justify-center items-center gap-12 relative overflow-visible transition-all duration-300">
-                                Test Chat
-                                <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
-                                </svg>
-                            </div>
-                            <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 flex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
-                                Discord.JS bot
-                            </div>
-                            <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 lex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
-                                Markdown show-off
-                            </div> */}
                         <div className="relative shrink-0 flex gap-2 w-full justify-center">
                             <TabInterface tabs={[
                                 { id: "home", label: "Open3", link: "/", permanent: true },
-                                { id: "pygame-chat", label: "Pygame Chat", link: "/pygame-chat" },
-                                { id: "other-chat", label: "Other Chat", link: "/sth-chat" },
+                                ...tabs.map(tab => ({ id: tab.id, label: tab.label, link: `/${tab.id}` }))
                             ]} />
                             <div className="pl-4 pr-6 h-full w-fit ml-auto">
                                 <Suspense fallback={<LoadingUserComponent />}>
@@ -77,7 +66,6 @@ export default function RootLayout({
                                 </Suspense>
                             </div>
                         </div>
-                        {/* </div> */}
                     </nav>
                     <div className="w-full min-h-full absolute top-[64px] bottom-0">
                         {children}

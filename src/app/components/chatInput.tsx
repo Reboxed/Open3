@@ -34,7 +34,6 @@ const ChatInput = /*forwardRef<HTMLInputElement, ChatInputProps>(*/({ onSend, cl
         const label = labelRef.current;
         const input = inputRef.current;
         if (label && input) {
-            console.log(e.currentTarget.innerText.split("\n").length)
             label.hidden = e.currentTarget.innerText.trim() != "" || e.currentTarget.innerText.split("\n").length > 2;
         }
         setInputValue(e.currentTarget.innerText);

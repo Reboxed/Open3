@@ -27,15 +27,15 @@ export interface GetChatsResponse {
     hasMore: boolean;
 }
 
-export async function GET(req: NextRequest, res: NextApiResponse<GetChatsResponse | ApiError>, { params }: { params: { userId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
     const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
     const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
     
     if (page < 1) {
-        return res.status(400).json({ error: 'Page must be greater than 0' });
+        return NextResponse.json({ error: 'Page must be greater than 0' }, { status: 400 });
     }
     if (limit < 1 || limit > 100) {
-        return res.status(400).json({ error: 'Limit must be between 1 and 100' });
+        return NextResponse.json({ error: 'Limit must be between 1 and 100' }, { status: 400 });
     }
 
     const userChats = chatsOfUsers.get(params.userId) || new Map<string, Chat>();
@@ -46,29 +46,29 @@ export async function GET(req: NextRequest, res: NextApiResponse<GetChatsRespons
     const endIndex = startIndex + limit;
     const paginatedChats = chatsArray.slice(startIndex, endIndex);
     
-    return res.status(200).json({
+    return NextResponse.json({
         chats: paginatedChats,
         total,
         page,
         limit,
         hasMore: endIndex < total
-    });
+    } as GetChatsResponse, { status: 200 });
 }
 
-export async function POST(req: NextApiRequest, res: NextApiResponse<CreateChatResponse | ApiError>, { params }: { params: { userId: string } }) {
-    const { label, provider, model } = await req.body as CreateChatRequest;
+export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
+    const { label, provider, model } = await req.json() as CreateChatRequest;
     if (!label) {
-        return res.status(400).json({ error: 'Label is required' });
+        return NextResponse.json({ error: 'Label is required' }, { status: 400 });
     }
     if (!model) {
-        return res.status(400).json({ error: 'Model is required' });
+        return NextResponse.json({ error: 'Model is required' }, { status: 400 });
     }
     if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
-        return res.status(400).json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") });
+        return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
     }
 
     const result = await createChat(params.userId, { label, model, provider });
-    return res.status(201).json(result);
+    return NextResponse.json(result as CreateChatResponse, { status: 201 });
 }
 
 export async function createChat(userId: string, { label, model, provider }: CreateChatRequest): Promise<CreateChatResponse> {
