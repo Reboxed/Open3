@@ -1,18 +1,29 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import Tabs, { Tab } from "./Tabs";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, useAuth, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { usePathname } from "next/navigation";
+import { ApiError, ApiTab } from "../api/tab/route";
+import useSWR from "swr";
 
 export function Navbar() {
     const pathname = usePathname();
-    const [tabs, setTabs] = useState<Tab[]>([
+    const { data } = useSWR("/api/tab", async (path) => {
+        return await fetch(path).then(async (res) => await res.json())
+    })
+    console.log(data)
+    let apiTabs = (data ?? []) as ApiTab[] | ApiError;
+    if ("error" in apiTabs) apiTabs = [];
+    const tabs = [
         { id: "home", label: "Open3", link: "/", permanent: true },
-        { id: "test", label: "Pygame", link: "/test" },
-        { id: "test1", label: "Bana", link: "/test1" },
-    ]);
+        ...apiTabs.map(apiTab => ({
+            id: apiTab.id,
+            label: apiTab.label,
+            link: apiTab.link
+        } as Tab))
+    ] as Tab[];
 
     for (let i = 0; i < tabs.length; i++) {
         tabs[i].active = tabs[i].link == pathname;
@@ -24,8 +35,7 @@ export function Navbar() {
         for (let i = 0; i < tabs?.length; i++) {
             tabs[i].active = tabs[i].link == pathname;
         }
-        setTabs(tabs);
-    }, [pathname, tabs]);
+    });
 
     return (
         <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">

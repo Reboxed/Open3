@@ -1,8 +1,7 @@
-import { NextApiRequest, NextApiResponse } from "next";
 import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "./[id]/send/route";
 import { Chat, GeminiChat } from "@/app/lib/types/ai";
-import { ApiError } from "../../tab/route";
+import { currentUser } from "@clerk/nextjs/server";
 
 export const chatsOfUsers = new Map<string, Map<string, Chat>>();
 
@@ -27,7 +26,11 @@ export interface GetChatsResponse {
     hasMore: boolean;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function GET(req: NextRequest) {
+    const user = await currentUser();
+    if (!user) return NextResponse.json([], { status: 401 });
+    if (user.banned) return NextResponse.json([], { status: 401 });
+
     const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
     const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
     
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
         return NextResponse.json({ error: 'Limit must be between 1 and 100' }, { status: 400 });
     }
 
-    const userChats = chatsOfUsers.get(params.userId) || new Map<string, Chat>();
+    const userChats = chatsOfUsers.get(user.id) || new Map<string, Chat>();
     const chatsArray = Array.from(userChats.values());
     
     const total = chatsArray.length;
@@ -55,7 +58,11 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     } as GetChatsResponse, { status: 200 });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function POST(req: NextRequest) {
+    const user = await currentUser();
+    if (!user) return NextResponse.json([], { status: 401 });
+    if (user.banned) return NextResponse.json([], { status: 401 });
+
     const { label, provider, model } = await req.json() as CreateChatRequest;
     if (!label) {
         return NextResponse.json({ error: 'Label is required' }, { status: 400 });
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
     }
 
-    const result = await createChat(params.userId, { label, model, provider });
+    const result = await createChat(user.id, { label, model, provider });
     return NextResponse.json(result as CreateChatResponse, { status: 201 });
 }
 
