@@ -1,5 +1,5 @@
 import { NextApiRequest } from "next";
-import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/[userId]/route";
+import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/route";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 

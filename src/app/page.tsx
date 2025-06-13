@@ -11,7 +11,7 @@ export default function Home() {
     const eventSourceRef = useRef<EventSource | null>(null);
 
     async function onSend(message: string) { 
-        const tabsReq = await fetch(`/api/tab?user_id=test`, {
+        const tabsReq = await fetch(`/api/tabs?user_id=test`, {
             method: "POST",
             body: JSON.stringify({
                 label: "New Chat",

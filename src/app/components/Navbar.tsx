@@ -10,7 +10,7 @@ import useSWR from "swr";
 
 export function Navbar() {
     const pathname = usePathname();
-    const { data } = useSWR("/api/tab", async (path) => {
+    const { data } = useSWR("/api/tabs", async (path) => {
         return await fetch(path).then(async (res) => await res.json())
     })
     console.log(data)
