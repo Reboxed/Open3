@@ -21,7 +21,7 @@ export interface TabChangeEvent {
 }
 
 interface TabsProps {
-    onTabChange?: (e: TabChangeEvent, tab: Tab) => void;
+    onTabChange?: (e: TabChangeEvent, prev: Tab, tab: Tab) => void;
     onTabCreate?: () => void;
     onTabClose?: (tab: Tab, nextTab: Tab) => void | Promise<void>;
     tabs: Tab[] | Promise<Tab[]>;
@@ -46,7 +46,6 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
 
     const router = useRouter();
     async function onTabChangeClick(idx: number) {
-        setActiveTab(idx);
         const tab = tabs[idx];
         let eventCanceled = false;
         const event = {
@@ -54,7 +53,8 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 eventCanceled = true;
             },
         } as TabChangeEvent;
-        onTabChange?.(event, tab);
+        onTabChange?.(event, tabs[activeTab], tab);
+        setActiveTab(idx);
         if (eventCanceled) return;
         if (tab?.link) router.push(tab.link);
     }
@@ -89,8 +89,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
             const clientWidth = el.clientWidth;
 
             const atStart = scrollLeft <= 0;
-            const atEnd = Math.ceil(scrollLeft + clientWidth) >= scrollWidth;
-            console.log(atStart, atEnd, Math.ceil(scrollLeft + clientWidth), scrollWidth);
+            const atEnd = Math.ceil(scrollLeft + clientWidth) >= scrollWidth - (el.children?.[1]?.clientWidth ?? 0)/2;
 
             let mask = "";
 
@@ -99,7 +98,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 mask = "none";
             } else if (atStart) {
                 // Only overflow on the right
-                mask = "linear-gradient(to right, black 80%, transparent 100%)";
+                mask = "linear-gradient(to right, black 85%, transparent 100%)";
             } else if (atEnd) {
                 // Only overflow on the left
                 mask = "linear-gradient(to right, transparent 0%, black 20%)";
@@ -134,7 +133,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     return (
         <>
             <ul
-                className="flex flex-1 max-w-full items-stretch gap-4 h-full overflow-x-scroll justify-start no-scrollbar"
+                className="flex flex-1 max-w-full gap-3 items-stretch h-full overflow-x-scroll pr-4 justify-start no-scrollbar"
                 ref={scrollRef}
                 style={maskStyle}
             >
@@ -147,7 +146,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         opacity: 0;
                       }
                       to {
-                        width: 100%;
+                        width: calc(100%-(32px*2));
                         min-width: fit;
                         opacity: 1;
                       }

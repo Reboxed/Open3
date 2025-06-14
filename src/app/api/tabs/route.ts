@@ -1,7 +1,8 @@
-import { NextApiRequest } from "next";
 import { createChat, CreateChatRequest, CreateChatResponse } from "../chat/route";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
+import eventBus from "@/app/lib/eventBus";
+import { TAB_CREATED_EVENT, TAB_DELETED_EVENT } from "../events/tabs/route";
 
 export interface ApiError {
     error: string;
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     const id = crypto.randomUUID();
     const tabs = tabsOfUser.get(user.id) || new Map<string, ApiTab>();
     tabs.set(id, { label, id, userId: user.id, link: `/${id}`, chatId: chatId || result?.id });
+    eventBus.emit(TAB_CREATED_EVENT(user.id), tabs.get(id));
     tabsOfUser.set(user.id, tabs);
 
     // Here you would typically save the tab to a database or in-memory store
@@ -67,12 +69,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id, label, chatId, userId: user.id, chatProperties: result } as CreateTabResponse, { status: 201 });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
 
+    const tabId = req.nextUrl.searchParams.get("id");
     const tabs = tabsOfUser.get(user.id) || new Map<string, ApiTab>();
+    if (tabId) {
+        const tab = tabs.get(tabId)
+        if (!tab) {
+            return NextResponse.json({ error: "Tab does not exist" }, { status: 400 });
+        }
+        return NextResponse.json(tab, { status: 200 });
+    }
+
     const response = Array.from(tabs.values());
     return NextResponse.json(response, { status: 200 });
 }
@@ -92,11 +103,13 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Tab not found " }, { status: 404 });
     }
 
+    eventBus.emit(TAB_DELETED_EVENT(user.id), tabs.get(id));
     tabs.delete(id);
     if (tabs.size === 0) {
         tabsOfUser.delete(user.id);
     }
     tabsOfUser.set(user.id, tabs);
+
 
     return NextResponse.json({ success: true }, { status: 200, });
 }

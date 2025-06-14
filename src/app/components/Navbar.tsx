@@ -4,9 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import Tabs, { Tab } from "./Tabs";
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
-import { usePathname } from "next/navigation";
-import { ApiTab, ApiError } from "../api/tabs/route";
-//import useSWR from "swr";
+import { usePathname, useRouter } from "next/navigation";
+import { ApiError, ApiTab } from "../api/tabs/route";
+import useSSE from "../hooks/useSSE";
 
 interface NavbarProps {
     tabs: ApiTab[];
@@ -14,6 +14,7 @@ interface NavbarProps {
 
 export function Navbar({ tabs: apiTabs }: NavbarProps) {
     const pathname = usePathname();
+    const router = useRouter();
     const [tabs, setTabs] = useState([
         { id: "home", label: "Open3", link: "/", permanent: true },
         ...apiTabs.map(apiTab => ({
@@ -24,39 +25,93 @@ export function Navbar({ tabs: apiTabs }: NavbarProps) {
         } as Tab))
     ] as Tab[]);
 
+    const sse = useSSE("/api/events/tabs");
+    useEffect(() => {
+        const message = sse.messages[sse.messages.length - 1] as {
+            event: `tab-${string}-${string}`;
+            data: ApiTab;
+        };
+        if (!message || !message.event || !message.data) return;
+        const type = message.event.split("-")[1];
+        const tab: Tab = {
+            id: message.data.id,
+            label: message.data.label,
+            link: message.data.link,
+            active: message.data.link == pathname,
+        };
+        const idx = tabs.findIndex(t => t.id == tab.id);
+        switch (type) {
+            case "created":
+                if (idx == -1) {
+                    const tabsTmp = Array.from(tabs);
+                    tabsTmp.push(tab);
+                    setTabs(tabsTmp);
+                }
+                break;
+            case "deleted":
+                if (idx >= 0) {
+                    const tabsTmp = Array.from(tabs);
+                    tabsTmp.splice(idx, 1);
+                    setTabs(tabsTmp);
+                    if (tab.active && tabs.length) {
+                        if (idx >= tabsTmp.length) {
+                            router.replace(tabs[tabsTmp.length - 1].link!);
+                        } else {
+                            router.replace(tabsTmp[idx].link!);
+                        }
+                    }
+                }
+                break;
+            default:
+                console.log("dunno wtf this is");
+        }
+        console.log(type, message.data.id);
+    }, [sse.messages]);
+
     // Update active tab
     useEffect(() => {
-        const tabsTmp = Array.from(tabs)
-        for (let i = 0; i < tabsTmp.length; i++) {
-            tabsTmp[i].active = tabsTmp[i].link == pathname;
-        }
-        setTabs(tabsTmp);
-        const activeTab = tabs.find(tab => tab.link == pathname);
+        async function update() {
+            const tabsTmp = Array.from(tabs);
+            const unknownTabId = pathname.split("/")[1];
+            if (unknownTabId.trim().length) {
+                const tab = await fetch("/api/tabs?" + new URLSearchParams({ id: unknownTabId }).toString()).then(res => res.json() as Promise<ApiTab>).catch(() => null);
+                if (!tab || tab instanceof Array || "error" in tab) {
+                    const idx = tabs.findIndex(t => t.id == unknownTabId);
+                    if (idx >= tabs.length) {
+                        router.replace(tabs[tabs.length - 1].link!);
+                    } else {
+                        router.replace(tabs[idx].link!);
+                    }
+                    //router.replace("/");
+                    return;
+                }
 
-        async function loadMissingTab() {
-            const tabs = await fetch("/api/tabs")
-                .then(res => res.json() as Promise<ApiTab[] | ApiError>)
-                .catch(() => [] as ApiTab[]);
-            if ("error" in tabs) return;
-            setTabs([
-                { id: "home", label: "Open3", link: "/", permanent: true },
-                ...tabs.map(apiTab => ({
-                    id: apiTab.id,
-                    label: apiTab.label,
-                    link: apiTab.link,
-                    active: apiTab.link == pathname
-                } as Tab))
-            ])
+                if (!tabsTmp.find(t => t.id == tab.id)) {
+                    tabsTmp.push({
+                        id: tab.id,
+                        label: tab.label,
+                        link: tab.link,
+                        active: tab.link == pathname,
+                    });
+                }
+            }
+
+            let activeFound = false;
+            for (let i = 0; i < tabsTmp.length; i++) {
+                tabsTmp[i].active = tabsTmp[i].link == pathname;
+                if (tabsTmp[i].active) {
+                    activeFound = true;
+                    break;
+                }
+            }
+            setTabs(tabsTmp);
         }
-        if (!activeTab) {
-            loadMissingTab();
-            console.log("TEST");
-        }
+        update();
     }, [pathname]);
 
     return (
         <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
-            <div className="relative shrink-0 flex gap-2 w-full max-w-full justify-center">
+            <div className="relative shrink-0 flex gap-2 w-full justify-center">
                 <Tabs
                     tabs={tabs || []}
                     onTabClose={tab => {

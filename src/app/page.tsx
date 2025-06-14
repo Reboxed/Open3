@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ChatInput from "./components/ChatInput";
 import 'highlight.js/styles/github-dark.css'; // Change to preferred style
-import { ApiError, CreateTabRequest, CreateTabResponse } from "./api/tab/route";
+import { ApiError, CreateTabRequest, CreateTabResponse } from "./api/tabs/route";
 import { useRouter } from "next/navigation";
+import useSSE from "./hooks/useSSE";
 
 export default function Home() {
     const [isLoading, setIsLoading] = useState(false);

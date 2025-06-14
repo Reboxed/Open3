@@ -1,6 +1,5 @@
 .tab-active {
     z-index: 20;
-    max-width: calc(100% - (16px * 2)) !important;
     background: #191919;
     border-radius: 16px 16px 0 0;
     position: relative;
