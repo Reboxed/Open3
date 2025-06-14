@@ -1,7 +1,9 @@
 .tab-active {
-    position: relative;
+    z-index: 20;
+    max-width: calc(100% - (16px * 2)) !important;
     background: #191919;
     border-radius: 16px 16px 0 0;
+    position: relative;
 }
 
 .tab-active::before,
@@ -15,20 +17,22 @@
 }
 
 .tab-active::before {
-    left: -16px;
+    left: 0;
+    transform: translateX(-100%);
     border-bottom-right-radius: 16px;
     box-shadow: 4px 4px 0 #191919;
 }
 
 .tab-active::after {
-    right: -16px;
+    right: 0;
+    transform: translateX(100%);
     border-bottom-left-radius: 16px;
     box-shadow: -4px 4px 0 #191919;
 }
 
 .tab-inactive {
-    position: relative;
     border-radius: 16px 16px 0 0;
+    position: relative;
 }
 
 .tab-inactive:hover::before,

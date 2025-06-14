@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import ChatInput from "./components/ChatInput";
 import 'highlight.js/styles/github-dark.css'; // Change to preferred style
 import { ApiError, CreateTabRequest, CreateTabResponse } from "./api/tab/route";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
-    const eventSourceRef = useRef<EventSource | null>(null);
 
-    async function onSend(message: string) { 
-        const tabsReq = await fetch(`/api/tabs?user_id=test`, {
+    const router = useRouter();
+    async function onSend() {
+        setIsLoading(true);
+        const tab = await fetch("/api/tabs?doCreateChat=1", {
             method: "POST",
             body: JSON.stringify({
                 label: "New Chat",
@@ -21,17 +22,15 @@ export default function Home() {
                     provider: "google", // Specify the provider
                 }
             } as CreateTabRequest),
-        });
-        const tab = await tabsReq.json() as CreateTabResponse | ApiError;
-        if ("error" in tab) {
-            return
-        }
-        redirect(`/${tab.id}`);
+        }).then(res => res.json() as Promise<CreateTabResponse | ApiError>)
+            .catch(() => undefined);
+        if (!tab || "error" in tab) return;
+        router.push(`/${tab.id}`);
     }
 
     return (
         <div className="min-w-full min-h-full flex flex-col justify-center items-center">
-            <ChatInput onSend={onSend} loading={isLoading} className="w-[80%] max-w-[1000px] max-md:w-[90%]" />
+            <ChatInput onSend={onSend} loading={isLoading} className={`w-[80%] max-w-[1000px] max-md:w-[90%] opacity-100 opacity-50 ${isLoading ? "!opacity-35" : ""} transition-opacity duration-500`} />
         </div>
     );
 }

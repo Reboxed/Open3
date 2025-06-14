@@ -77,14 +77,14 @@ export async function GET() {
     return NextResponse.json(response, { status: 200 });
 }
 
-export async function DELETE(req: NextApiRequest) {
+export async function DELETE(req: NextRequest) {
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
 
-    const { id } = await req.body as { id: string };
+    const { id } = await req.json() as { id: string };
     if (!id) {
-        return NextResponse.json({ error: "User ID (user_id) is required" }, { status: 400 });
+        return NextResponse.json({ error: "ID (id) is required" }, { status: 400 });
     }
 
     const tabs = tabsOfUser.get(user.id);
