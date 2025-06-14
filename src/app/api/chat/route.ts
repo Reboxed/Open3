@@ -85,10 +85,7 @@ export async function createChat(userId: string, { label, model, provider }: Cre
     chat.id = id;
     chat.provider = provider;
     chat.label = label;
-    
-    const chats = chatsOfUsers.get(userId) || new Map<string, Chat>();
-    chats.set(id, chat);
-    chatsOfUsers.set(userId, chats);
+    chatsOfUsers.set(userId, new Map<string, Chat>());
     
     return {
         id,

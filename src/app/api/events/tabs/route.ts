@@ -1,6 +1,6 @@
-import { currentUser } from "@clerk/nextjs/server";
+/*import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { ApiError, ApiTab } from "../../tabs/route";
+import { ApiError } from "@/app/lib/types/api";
 import eventBus from "@/app/lib/eventBus";
 
 export const TAB_CREATED_EVENT = (userId: string) => `tab-created-${userId}`;
@@ -44,4 +44,4 @@ export async function GET(req: NextRequest) {
             Connection: 'keep-alive',
         },
     });
-}
+}*/

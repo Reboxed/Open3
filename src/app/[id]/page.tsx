@@ -14,7 +14,8 @@ import { useParams } from "next/navigation";
 
 export default function Chat() {
     const params = useParams();
-    const chatId = params.id;
+    const tabId = params.id?.toString() ?? "";
+    const MESSAGES_ID = `messages-${tabId}`;
 
     const [messages, setMessages] = useState<Message[]>([]);
     const messagesRef = useRef<HTMLDivElement>(null);
@@ -22,15 +23,20 @@ export default function Chat() {
     const eventSourceRef = useRef<EventSource | null>(null);
 
     useEffect(() => {
-        const savedMessages = localStorage.getItem(`geminiMessages-${chatId}`);
+        const savedMessages = localStorage.getItem(MESSAGES_ID);
         if (savedMessages) {
             setMessages(JSON.parse(savedMessages));
         }
-    }, [chatId]);
+    }, [tabId]);
 
     useEffect(() => {
-        if (messages.length != 0 || !localStorage.getItem(`geminiMessages-${chatId}`)) {
-            localStorage.setItem(`geminiMessages-${chatId}`, JSON.stringify(messages));
+        if (messages.length != 0 || !localStorage.getItem(MESSAGES_ID)) {
+            if (!messages.length) {
+                localStorage.removeItem(MESSAGES_ID);
+                return;
+            }
+
+            localStorage.setItem(MESSAGES_ID, JSON.stringify(messages));
             const messagesElement = messagesRef.current;
             if (messagesElement) {
                 window.scrollTo({
@@ -39,7 +45,7 @@ export default function Chat() {
                 })
             }
         }
-    }, [messages, chatId]);
+    }, [messages, tabId]);
 
     function onSend(message: string) {
         const userMessage: Message = { role: "user", parts: [{ text: message }] };
@@ -49,7 +55,7 @@ export default function Chat() {
         if (eventSourceRef.current?.OPEN) return;
         if (eventSourceRef.current) eventSourceRef.current.close();
 
-        const eventSource = new EventSource(`/api/chat?prompt=${encodeURIComponent(message)}&id=${chatId}`);
+        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}`);
         eventSourceRef.current = eventSource;
 
         let assistantMessage = "";

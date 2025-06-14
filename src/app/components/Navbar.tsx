@@ -2,136 +2,83 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Tabs, { Tab } from "./Tabs";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs"
+import { ClerkLoading, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { usePathname, useRouter } from "next/navigation";
-import { ApiError, ApiTab } from "../api/tabs/route";
-import useSSE from "../hooks/useSSE";
+import ChatPalette from "./ChatPalette";
 
-interface NavbarProps {
-    tabs: ApiTab[];
-}
-
-export function Navbar({ tabs: apiTabs }: NavbarProps) {
+export function Navbar() {
     const pathname = usePathname();
     const router = useRouter();
-    const [tabs, setTabs] = useState([
-        { id: "home", label: "Open3", link: "/", permanent: true },
-        ...apiTabs.map(apiTab => ({
-            id: apiTab.id,
-            label: apiTab.label,
-            link: apiTab.link,
-            active: apiTab.link == pathname
-        } as Tab))
-    ] as Tab[]);
 
-    const sse = useSSE("/api/events/tabs");
+    const [showPalette, setShowPalette] = useState(false);
+    const [tabs, setTabs] = useState<Tab[]>([]);
+
     useEffect(() => {
-        const message = sse.messages[sse.messages.length - 1] as {
-            event: `tab-${string}-${string}`;
-            data: ApiTab;
-        };
-        if (!message || !message.event || !message.data) return;
-        const type = message.event.split("-")[1];
-        const tab: Tab = {
-            id: message.data.id,
-            label: message.data.label,
-            link: message.data.link,
-            active: message.data.link == pathname,
-        };
-        const idx = tabs.findIndex(t => t.id == tab.id);
-        switch (type) {
-            case "created":
-                if (idx == -1) {
-                    const tabsTmp = Array.from(tabs);
-                    tabsTmp.push(tab);
-                    setTabs(tabsTmp);
-                }
-                break;
-            case "deleted":
-                if (idx >= 0) {
-                    const tabsTmp = Array.from(tabs);
-                    tabsTmp.splice(idx, 1);
-                    setTabs(tabsTmp);
-                    if (tab.active && tabs.length) {
-                        if (idx >= tabsTmp.length) {
-                            router.replace(tabs[tabsTmp.length - 1].link!);
-                        } else {
-                            router.replace(tabsTmp[idx].link!);
-                        }
-                    }
-                }
-                break;
-            default:
-                console.log("dunno wtf this is");
-        }
-        console.log(type, message.data.id);
-    }, [sse.messages]);
+        setTabs(getTabs(localStorage).map(t => {
+            t.active = t.link === pathname;
+            return t;
+        }));
+    }, []);
 
     // Update active tab
     useEffect(() => {
-        async function update() {
-            const tabsTmp = Array.from(tabs);
-            const unknownTabId = pathname.split("/")[1];
-            if (unknownTabId.trim().length) {
-                const tab = await fetch("/api/tabs?" + new URLSearchParams({ id: unknownTabId }).toString()).then(res => res.json() as Promise<ApiTab>).catch(() => null);
-                if (!tab || tab instanceof Array || "error" in tab) {
-                    const idx = tabs.findIndex(t => t.id == unknownTabId);
-                    if (idx >= tabs.length) {
-                        router.replace(tabs[tabs.length - 1].link!);
-                    } else {
-                        router.replace(tabs[idx].link!);
-                    }
-                    //router.replace("/");
-                    return;
-                }
-
-                if (!tabsTmp.find(t => t.id == tab.id)) {
-                    tabsTmp.push({
-                        id: tab.id,
-                        label: tab.label,
-                        link: tab.link,
-                        active: tab.link == pathname,
-                    });
-                }
+        const lsTabs = getTabs(localStorage);
+        let activeFound = false;
+        for (let i = 0; i < lsTabs.length; i++) {
+            lsTabs[i].active = lsTabs[i].link == pathname;
+            if (lsTabs[i].active) {
+                activeFound = true;
+                break;
             }
-
-            let activeFound = false;
-            for (let i = 0; i < tabsTmp.length; i++) {
-                tabsTmp[i].active = tabsTmp[i].link == pathname;
-                if (tabsTmp[i].active) {
-                    activeFound = true;
-                    break;
-                }
-            }
-            setTabs(tabsTmp);
         }
-        update();
+        if (!activeFound) router.replace("/");
+        setTabs(lsTabs);
     }, [pathname]);
 
+    useEffect(() => {
+        try {
+            setTabsS(localStorage, tabs);
+        } catch { }
+    }, [tabs])
+
     return (
-        <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
-            <div className="relative shrink-0 flex gap-2 w-full justify-center">
-                <Tabs
-                    tabs={tabs || []}
-                    onTabClose={tab => {
-                        fetch("/api/tabs", {
-                            method: "DELETE",
-                            body: JSON.stringify({ id: tab.id })
-                        }).then(res => res.json() as Promise<{ success?: boolean }>)
-                            .catch(() => undefined);
-                        const tabsTmp = Array.from(tabs)
-                        tabsTmp.splice(tabsTmp.findIndex(t => t.id == tab.id), 1);
-                        setTabs(tabsTmp);
-                    }}
-                />
-                <div className="pl-4 pr-6 h-full w-fit ml-auto">
-                    <Suspense fallback={<LoadingUserComponent />}>
+        <>
+            <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+                <div className="relative shrink-0 flex gap-2 w-full justify-center">
+                    <Tabs
+                        tabs={[
+                            { id: "home", label: "Open3", link: "/", permanent: true, active: pathname.trim() == "/" },
+                            ...tabs
+                        ]}
+                        onTabCreate={() => setShowPalette(true)}
+                        onTabClose={tab => {
+                            let lsTabs = getTabs(localStorage);
+                            const idx = lsTabs.findIndex(t => t.id == tab.id);
+                            if (idx === -1 && lsTabs.length) {
+                                let tabIdx: number;
+                                if (idx >= lsTabs.length) tabIdx = lsTabs.length - 1;
+                                else tabIdx = idx;
+                                router.replace(lsTabs[tabIdx].link ?? "/");
+                            } else if (lsTabs.length) {
+                                lsTabs.splice(idx, 1);
+                            }
+
+                            lsTabs = lsTabs.map(t => {
+                                t.active = t.link === pathname;
+                                return t;
+                            });
+                            setTabs(lsTabs);
+                        }}
+                    />
+                    <div className="h-full w-fit ml-auto">
                         <UserComponent />
-                    </Suspense>
+                    </div>
                 </div>
-            </div>
-        </nav>
+            </nav>
+            <ChatPalette hidden={!showPalette} className="" />
+        </>
     )
 }
 
@@ -143,7 +90,7 @@ function UserComponent() {
                 <SignUpButton />
             </SignedOut>
             <SignedIn>
-                <div className="pt-0.5">
+                <div className="pt-1 min-w-[68px]">
                     <UserButton appearance={{
                         baseTheme: dark,
                         elements: {
@@ -155,13 +102,16 @@ function UserComponent() {
                     }} />
                 </div>
             </SignedIn>
+            <ClerkLoading>
+                <LoadingUserComponent />
+            </ClerkLoading>
         </>
     )
 }
 
 function LoadingUserComponent() {
     return (
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-4 items-center min-w-[68px] pt-1">
             <span className="text-transparent w-[28px] h-[28px] rounded-full bg-white/15">.</span>
         </div>
     )

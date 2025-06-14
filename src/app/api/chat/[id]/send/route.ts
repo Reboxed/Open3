@@ -5,7 +5,7 @@ import { currentUser } from "@clerk/nextjs/server";
 
 export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic"];
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
@@ -16,8 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const chat: Chat | undefined = chatsOfUsers.get(user.id)?.get(params.id);
-    if (!chat) return NextResponse.json({ error: 'Failed to get chat' }, { status: 400 });
+    const { id } = await params;
+    console.log(id, "CHAT ID")
+    const chat: Chat | undefined = chatsOfUsers.get(user.id)?.get(id);
+    if (!chat) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
 
     try {
         const stream = await chat.sendStream({

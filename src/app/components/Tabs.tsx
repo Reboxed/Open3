@@ -20,7 +20,7 @@ export interface TabChangeEvent {
     preventDefault(): void;
 }
 
-interface TabsProps {
+export interface TabsProps {
     onTabChange?: (e: TabChangeEvent, prev: Tab, tab: Tab) => void;
     onTabCreate?: () => void;
     onTabClose?: (tab: Tab, nextTab: Tab) => void | Promise<void>;
@@ -143,17 +143,17 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                       from {
                         width: 0px;
                         min-width: 0px;
-                        opacity: 0;
+                        opacity: 1;
                       }
                       to {
-                        width: calc(100%-(32px*2));
+                        width: 100%;
                         min-width: fit;
                         opacity: 1;
                       }
                     }
 
                     .animate-grow-width {
-                      animation: growWidth 350ms ease-out forwards;
+                      animation: growWidth 150ms ease-in-out forwards;
                     }
                 `}
                 </style>
@@ -166,7 +166,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         className={`
                             flex h-full items-center
                             gap-12 justify-between px-4 pl-5 py-3 min-w-fit
-                            ${tab.permanent ? "!px-[calc((48px+16px)/2)] !max-w-fit" : "animate-grow-width"} cursor-pointer rounded-t-2xl font-medium
+                            ${tab.permanent ? "!px-[calc((48px+16px)/2)] !max-w-fit" : "w-full"} cursor-pointer rounded-t-2xl font-medium
                             transition-all duration-250
                             ${activeTab == idx ?
                                 `tab-active z-20 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
@@ -195,7 +195,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 ))}
 
             </ul>
-            <button onClick={onTabCreate} className="flex items-center justify-center w-8 h-8 mt-1 mx-4 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
+            <button onClick={onTabCreate} className="flex items-center justify-center w-8 h-8 mt-1 mx-4 pb-1 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
                 <span className="text-3xl font-light hover:text-white !text-neutral-200/50 leading-none">+</span>
             </button>
         </>
