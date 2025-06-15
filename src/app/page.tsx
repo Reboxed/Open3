@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { CreateChatResponse, CreateChatRequest } from "./api/chat/route";
 import { ApiError } from "@/app/lib/types/api";
 import { addTabs } from "./lib/utils/loadTabs";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useClerk } from "@clerk/nextjs";
 
 export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
