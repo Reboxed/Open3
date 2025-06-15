@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "./[id]/send/route";
 import { Chat, GeminiChat } from "@/app/lib/types/ai";
-import { currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
+import "@/app/lib/redis";
 
 export const chatsOfUsers = new Map<string, Map<string, Chat>>();
 
@@ -18,8 +20,12 @@ export interface CreateChatResponse {
     provider: string; // Specify the provider
 }
 
+export interface GetChat extends Chat {
+    id: string;
+}
+
 export interface GetChatsResponse {
-    chats: Chat[];
+    chats: GetChat[];
     total: number;
     page: number;
     limit: number;
@@ -27,13 +33,19 @@ export interface GetChatsResponse {
 }
 
 export async function GET(req: NextRequest) {
-    const user = await currentUser();
-    if (!user) return NextResponse.json([], { status: 401 });
-    if (user.banned) return NextResponse.json([], { status: 401 });
+    if (!redis) {
+        return NextResponse.json({
+            error: "Redis connection failured"
+        }, { status: 500 })
+    }
+
+    const user = await auth();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user.userId) return NextResponse.json({ exists: [] }, { status: 401 });
 
     const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
     const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
-    
+
     if (page < 1) {
         return NextResponse.json({ error: 'Page must be greater than 0' }, { status: 400 });
     }
@@ -41,16 +53,41 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Limit must be between 1 and 100' }, { status: 400 });
     }
 
-    const userChats = chatsOfUsers.get(user.id) || new Map<string, Chat>();
-    const chatsArray = Array.from(userChats.values());
-    
-    const total = chatsArray.length;
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedChats = chatsArray.slice(startIndex, endIndex);
-    
+
+    const chatIds = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), startIndex, endIndex);
+    if (chatIds.length === 0) {
+        return NextResponse.json({
+            chats: [],
+            total: 0,
+            page,
+            limit,
+            hasMore: false
+        }, { status: 200 });
+    }
+
+    // Get chat data from hash
+    const rawChats = await redis.hmget(USER_CHATS_KEY(user.userId), ...chatIds);
+    const chats = rawChats
+        .map((chatStr, i) => {
+            try {
+                return chatStr ? {
+                    ...JSON.parse(chatStr),
+                    id: chatIds[i],
+                } : null;
+            } catch {
+                // Optional: log/skip broken chat
+                return null;
+            }
+        })
+        .filter(Boolean); // remove nulls
+
+    // Get total count once (not paginated)
+    const total = await redis.zcard(USER_CHATS_INDEX_KEY(user.userId));
+
     return NextResponse.json({
-        chats: paginatedChats,
+        chats,
         total,
         page,
         limit,
@@ -59,6 +96,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+    if (!redis) {
+        return NextResponse.json({
+            error: "Redis connection failure"
+        }, { status: 500 });
+    }
+
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
@@ -79,14 +122,31 @@ export async function POST(req: NextRequest) {
 }
 
 export async function createChat(userId: string, { label, model, provider }: CreateChatRequest): Promise<CreateChatResponse> {
+    if (!redis) throw "Redis connection failure";
+
     const id = crypto.randomUUID();
     // TODO: Provider
     const chat = new GeminiChat([], model ?? "gemini-2.0-flash"); // TODO: make it use the model
-    chat.id = id;
     chat.provider = provider;
     chat.label = label;
-    chatsOfUsers.set(userId, new Map<string, Chat>());
-    
+
+    const result = await redis.multi()
+        .hset(USER_CHATS_KEY(userId), id, JSON.stringify({
+            label: chat.label,
+            model: chat.model,
+            provider: chat.provider,
+            createdAt: Date.now(),
+        }))
+        .zadd(USER_CHATS_INDEX_KEY(userId), Date.now(), id)
+        .exec();
+
+    // Check for failure
+    if (!result || result.some(([err]) => err)) {
+        // Optionally: clean up in case partial state exists
+        await redis.hdel(USER_CHATS_KEY(userId), id);
+        throw new Error("Failed to save chat to Redis");
+    }
+
     return {
         id,
         label,
