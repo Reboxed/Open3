@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import redis, { USER_CHATS_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
 import { auth } from "@clerk/nextjs/server";
-import { currentUser } from "@clerk/nextjs/server";
 
 export async function POST(req: Request) {
     if (!redis) {
@@ -22,7 +21,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ exists: [] }, { status: 400 });
     }
 
-    const chatList = await redis.lrange(USER_CHATS_KEY(user.userId), 0, -1);
+    console.log("Checking existence of chat IDs:", ids);
+    const chatList = await redis.zrange(USER_CHATS_INDEX_KEY(user.userId), 0, -1);
+    console.log("Chat List:", chatList);
     // Return an array of booleans for each id
     const exists = ids.map(id => chatList.includes(id));
     return NextResponse.json({ exists });

@@ -31,17 +31,27 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     const initialTabs = rawTabs instanceof Promise ? use(rawTabs) : rawTabs;
     const [tabs, setTabs] = useState<Tab[]>(initialTabs ?? []);
     const [activeTab, setActiveTab] = useState<number>(tabs.findIndex(tab => tab.active));
+    const [justAddedIdx, setJustAddedIdx] = useState<number | null>(null);
+    const hasMounted = useRef(false);
 
     // Syncing the tabs with the parent --> parent can also change active tab.
     // It's the parent's responsibility to keep 1 tab active at a time.
     useEffect(() => {
         const updateTabs = async () => {
             const resolvedTabs = rawTabs instanceof Promise ? await rawTabs : rawTabs;
+            // Only set justAddedIdx if not initial mount
+            if (hasMounted.current && resolvedTabs && resolvedTabs.length > tabs.length) {
+                setJustAddedIdx(resolvedTabs.length - 1);
+            } else {
+                setJustAddedIdx(null);
+            }
             setTabs(resolvedTabs ?? []);
             setActiveTab(resolvedTabs?.findIndex(tab => tab.active));
         };
 
         updateTabs();
+        hasMounted.current = true;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rawTabs]);
 
     const router = useRouter();
@@ -177,7 +187,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     return (
         <>
             <ul
-                className="flex flex-1 max-w-full gap-3 items-stretch h-full overflow-x-auto overflow-y-clip pr-4 justify-start no-scrollbar"
+                className="flex flex-1 max-w-full gap-3 items-stretch overflow-x-auto overflow-y-clip pr-4 justify-start no-scrollbar h-[48px]"
                 ref={scrollRef}
                 style={maskStyle}
             >
@@ -216,7 +226,9 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                                 `tab-active z-20 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
                                 `tab-inactive hover:bg-[#191919]/60 ${!tab.permanent ? "text-neutral-200/65" : "text-primary-light/65 !font-bold"}`
                             }
+                            ${justAddedIdx === idx ? "animate-grow-width" : ""}
                         `}
+                        onAnimationEnd={() => justAddedIdx === idx && setJustAddedIdx(null)}
                     >
                         <span className="text-sm select-none whitespace-nowrap">
                             {tab.label}

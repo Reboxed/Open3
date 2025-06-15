@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Tabs, { Tab } from "./Tabs";
-import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs"
+import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs";
 import { ClerkLoading, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { usePathname, useRouter } from "next/navigation";
@@ -11,9 +11,9 @@ import ChatPalette from "./ChatPalette";
 export function Navbar() {
     const pathname = usePathname();
     const router = useRouter();
-
     const [showPalette, setShowPalette] = useState(false);
     const [tabs, setTabs] = useState<Tab[]>([]);
+    const lastPathRef = useRef<string>("");
 
     // Helper to check all tab IDs at once
     const checkTabsExist = useCallback(async (tabsToCheck: Tab[]): Promise<boolean[]> => {
@@ -27,7 +27,6 @@ export function Navbar() {
             });
             if (!res.ok) return tabsToCheck.map(() => true);
             const data = await res.json();
-            // Map back to original tabs: permanent tabs always true, others from result
             let idx = 0;
             return tabsToCheck.map(tab => tab.permanent ? true : !!data.exists[idx++]);
         } catch {
@@ -42,7 +41,6 @@ export function Navbar() {
         if (filteredTabs.length !== tabsToCheck.length) {
             setTabsS(localStorage, filteredTabs);
             setTabs(filteredTabs);
-            // Redirect if current path is not in filteredTabs
             const currentTab = filteredTabs.find(tab => tab.link === pathname);
             if (!currentTab) {
                 if (filteredTabs.length > 0) {
@@ -56,42 +54,26 @@ export function Navbar() {
         }
     }, [checkTabsExist, pathname, router]);
 
-    useEffect(() => {
-        const lsTabs = getTabs(localStorage);
-        for (let i = 0; i < lsTabs.length; i++) {
-            lsTabs[i].active = lsTabs[i].link == pathname;
-            if (lsTabs[i].active) break;
-        }
-        // Clean up deleted tabs on mount
-        cleanTabs(lsTabs);
-    }, [cleanTabs, pathname]);
-
-    // Update active tab and clean up deleted tabs on path or palette change
+    // Single effect to sync tabs and clean up deleted ones
     useEffect(() => {
         const lsTabs = getTabs(localStorage);
         let activeFound = false;
         for (let i = 0; i < lsTabs.length; i++) {
             lsTabs[i].active = lsTabs[i].link == pathname;
-            if (lsTabs[i].active) {
-                activeFound = true;
-                break;
-            }
+            if (lsTabs[i].active) activeFound = true;
         }
-        if (!activeFound) router.replace("/");
-        // Clean up deleted tabs on tab change
+        if (!activeFound && lsTabs.length > 0) {
+            router.replace("/");
+        }
         cleanTabs(lsTabs);
+        // Only update localStorage if tabs changed
+        setTabsS(localStorage, lsTabs);
     }, [pathname, showPalette, cleanTabs, router]);
 
-    useEffect(() => {
-        try {
-            setTabsS(localStorage, tabs);
-        } catch { }
-    }, [tabs])
-
+    // Keyboard shortcut for palette
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
             const isMac = navigator.platform.toLowerCase().includes('mac');
-            // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
             if ((isMac && e.metaKey && e.key.toLowerCase() === 'k') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'k')) {
                 e.preventDefault();
                 setShowPalette(true);
@@ -130,12 +112,12 @@ export function Navbar() {
                             } else if (lsTabs.length) {
                                 lsTabs.splice(idx, 1);
                             }
-
                             lsTabs = lsTabs.map(t => {
                                 t.active = t.link === pathname;
                                 return t;
                             });
                             setTabs(lsTabs);
+                            setTabsS(localStorage, lsTabs);
                         }}
                     />
                     <div className="h-full w-fit ml-auto">

@@ -1,5 +1,7 @@
 import { Content, GoogleGenAI } from "@google/genai";
 
+export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic"];
+
 export interface Message {
     role?: "user" | "model";
     parts: { text: string }[];

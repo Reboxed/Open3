@@ -16,9 +16,7 @@ export function getTabs(localStorage: Storage): Tab[] {
 }
 
 export function setTabs(localStorage: Storage, tabs: Tab[]) {
-    for (let i = 0; i < tabs.length; i++) {
-        tabs[i].active = false;
-    }
+    // Do not reset all active flags here; let the caller manage which tab is active
     localStorage.setItem(TABS_LS_NAME, JSON.stringify(tabs));
 }
 

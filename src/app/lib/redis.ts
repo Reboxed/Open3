@@ -7,7 +7,10 @@ declare global {
 let redis: Redis;
 
 if (process.env.NODE_ENV === 'production') {
-  redis = new Redis(process.env.REDIS_URL!);
+  if (!global.redis) {
+    global.redis = new Redis(process.env.REDIS_URL!);
+  }
+  redis = global.redis;
 } else {
   if (!global.redis) {
     global.redis = new Redis(process.env.REDIS_URL!);

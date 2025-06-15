@@ -1,10 +1,8 @@
-import { Chat, GeminiChat } from "@/app/lib/types/ai";
+import { GeminiChat } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { USER_CHATS_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
-
-export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic"];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
