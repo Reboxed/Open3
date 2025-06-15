@@ -1,7 +1,7 @@
 "use client";
 
-import "./tabs.css"
-import { useEffect, useState, use, useRef } from "react";
+import "./Tabs.css"
+import { useEffect, useState, use, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export type Tab = {
@@ -45,7 +45,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     }, [rawTabs]);
 
     const router = useRouter();
-    async function onTabChangeClick(idx: number) {
+    const onTabChangeClick = useCallback(async (idx: number) => {
         const tab = tabs[idx];
         let eventCanceled = false;
         const event = {
@@ -57,9 +57,9 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
         setActiveTab(idx);
         if (eventCanceled) return;
         if (tab?.link) router.push(tab.link);
-    }
+    }, [tabs, activeTab, onTabChange, router]);
 
-    async function onCloseTabClick(idx: number) {
+    const onCloseTabClick = useCallback(async (idx: number) => {
         const tab = tabs[idx];
         const tabsCopy = Array.from(tabs);
         tabsCopy.splice(idx, 1);
@@ -74,7 +74,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
         const res = onTabClose?.(tab, tabsCopy[nextTab]);
         if (res instanceof Promise) await res;
         if (tabsCopy[nextTab]?.link) router.replace(tabsCopy[nextTab].link!);
-    };
+    }, [tabs, activeTab, onTabClose, router]);
 
     const scrollRef = useRef<HTMLUListElement>(null);
     const [maskStyle, setMaskStyle] = useState<React.CSSProperties>({});
@@ -130,10 +130,54 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
         };
     }, [tabs]);
 
+    // Keyboard shortcuts: Alt/Opt+W to close, Alt/Opt+Tab to next, Alt/Opt+Shift+Tab to prev
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            // Don't trigger shortcuts in input, textarea, or contenteditable
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            // Debug log
+            // console.log('keydown', e.key, e.code, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey);
+            // Close tab: Alt/Opt+W
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key.toLowerCase() === 'w' || e.code === 'KeyW')) {
+                e.preventDefault();
+                if (tabs[activeTab] && !tabs[activeTab].permanent) {
+                    onCloseTabClick(activeTab);
+                }
+                return;
+            }
+            // Next tab: Alt/Opt+Tab
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
+                e.preventDefault();
+                let nextIdx = activeTab + 1;
+                if (nextIdx >= tabs.length) nextIdx = 0;
+                if (tabs[nextIdx]) onTabChangeClick(nextIdx);
+                return;
+            }
+            // Previous tab: Alt/Opt+Shift+Tab
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
+                e.preventDefault();
+                let prevIdx = activeTab - 1;
+                if (prevIdx < 0) prevIdx = tabs.length - 1;
+                if (tabs[prevIdx]) onTabChangeClick(prevIdx);
+                return;
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, tabs, onCloseTabClick, onTabChangeClick]);
+
+    // Detect OS for shortcut display
+    const [closeShortcut, setCloseShortcut] = useState('Alt+W');
+    useEffect(() => {
+        const isMac = navigator.platform.toLowerCase().includes('mac');
+        setCloseShortcut(isMac ? '⌥W' : 'Alt+W');
+    }, []);
+
     return (
         <>
             <ul
-                className="flex flex-1 max-w-full gap-3 items-stretch h-full overflow-x-scroll pr-4 justify-start no-scrollbar"
+                className="flex flex-1 max-w-full gap-3 items-stretch h-full overflow-x-auto overflow-y-clip pr-4 justify-start no-scrollbar"
                 ref={scrollRef}
                 style={maskStyle}
             >
@@ -179,23 +223,28 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         </span>
 
                         {!tab.permanent && (
-                            <button
-                                className="rounded cursor-pointer hover:bg-white/10 transition-opacity duration-200"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onCloseTabClick(idx);
-                                }}
-                            >
-                                <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
-                                </svg>
-                            </button>
+                            <span className="relative group">
+                                <button
+                                    className="rounded hover:bg-white/10 transition-opacity duration-200 !cursor-pointer"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onCloseTabClick(idx);
+                                    }}
+                                >
+                                    <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
+                                    </svg>
+                                </button>
+                                <span className="absolute right-full z-50 px-2 py-1 rounded bg-black text-xs text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 shadow-lg delay-750">
+                                    Close: {closeShortcut}
+                                </span>
+                            </span>
                         )}
                     </li>
                 ))}
 
             </ul>
-            <button onClick={onTabCreate} className="flex items-center justify-center w-8 h-8 mt-1 mx-4 pb-1 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200">
+            <button onClick={onTabCreate} className="flex items-center justify-center w-8 h-8 mt-1 mx-4 pb-1 cursor-pointer hover:bg-white/5 rounded-md transition-colors duration-200 overflow-clip">
                 <span className="text-3xl font-light hover:text-white !text-neutral-200/50 leading-none">+</span>
             </button>
         </>

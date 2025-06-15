@@ -6,7 +6,6 @@ export interface Message {
 }
 
 export interface Chat {
-    id: string;
     label?: string;
     model: string;
     provider: string;
@@ -16,7 +15,6 @@ export interface Chat {
 }
 
 export class GeminiChat implements Chat {
-    id: string = "";
     model: string;
     provider: string = "google";
     label?: string;
