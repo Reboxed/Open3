@@ -1,73 +1,154 @@
 "use client";
 
-import { Suspense } from "react";
-import TabInterface, { Tab } from "./TabInterface";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { useEffect, useState, useCallback } from "react";
+import Tabs, { Tab } from "./Tabs";
+import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs"
+import { ClerkLoading, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
+import { usePathname, useRouter } from "next/navigation";
+import ChatPalette from "./ChatPalette";
 
-export function Navbar({ tabs }: { tabs: Tab[] }) {
+export function Navbar() {
+    const pathname = usePathname();
+    const router = useRouter();
+
+    const [showPalette, setShowPalette] = useState(false);
+    const [tabs, setTabs] = useState<Tab[]>([]);
+
+    // Helper to check all tab IDs at once
+    const checkTabsExist = useCallback(async (tabsToCheck: Tab[]): Promise<boolean[]> => {
+        const ids = tabsToCheck.filter(tab => !tab.permanent && tab.id).map(tab => tab.id);
+        if (ids.length === 0) return tabsToCheck.map(() => true);
+        try {
+            const res = await fetch("/api/chat/exists", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids }),
+            });
+            if (!res.ok) return tabsToCheck.map(() => true);
+            const data = await res.json();
+            // Map back to original tabs: permanent tabs always true, others from result
+            let idx = 0;
+            return tabsToCheck.map(tab => tab.permanent ? true : !!data.exists[idx++]);
+        } catch {
+            return tabsToCheck.map(() => true);
+        }
+    }, []);
+
+    // Clean up tabs whose chats are deleted
+    const cleanTabs = useCallback(async (tabsToCheck: Tab[]) => {
+        const results = await checkTabsExist(tabsToCheck);
+        const filteredTabs = tabsToCheck.filter((tab, i) => results[i]);
+        if (filteredTabs.length !== tabsToCheck.length) {
+            setTabsS(localStorage, filteredTabs);
+            setTabs(filteredTabs);
+            // Redirect if current path is not in filteredTabs
+            const currentTab = filteredTabs.find(tab => tab.link === pathname);
+            if (!currentTab) {
+                if (filteredTabs.length > 0) {
+                    router.replace(filteredTabs[0].link ?? "/");
+                } else {
+                    router.replace("/");
+                }
+            }
+        } else {
+            setTabs(tabsToCheck);
+        }
+    }, [checkTabsExist, pathname, router]);
+
+    useEffect(() => {
+        const lsTabs = getTabs(localStorage);
+        for (let i = 0; i < lsTabs.length; i++) {
+            lsTabs[i].active = lsTabs[i].link == pathname;
+            if (lsTabs[i].active) break;
+        }
+        // Clean up deleted tabs on mount
+        cleanTabs(lsTabs);
+    }, [cleanTabs, pathname]);
+
+    // Update active tab and clean up deleted tabs on path or palette change
+    useEffect(() => {
+        const lsTabs = getTabs(localStorage);
+        let activeFound = false;
+        for (let i = 0; i < lsTabs.length; i++) {
+            lsTabs[i].active = lsTabs[i].link == pathname;
+            if (lsTabs[i].active) {
+                activeFound = true;
+                break;
+            }
+        }
+        if (!activeFound) router.replace("/");
+        // Clean up deleted tabs on tab change
+        cleanTabs(lsTabs);
+    }, [pathname, showPalette, cleanTabs, router]);
+
+    useEffect(() => {
+        try {
+            setTabsS(localStorage, tabs);
+        } catch { }
+    }, [tabs])
+
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            const isMac = navigator.platform.toLowerCase().includes('mac');
+            // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+            if ((isMac && e.metaKey && e.key.toLowerCase() === 'k') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'k')) {
+                e.preventDefault();
+                setShowPalette(true);
+            }
+        }
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
+
     return (
-        <nav className="h-fit flex gap-2 pt-4 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
-            {/* <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">
-                <div className="pb-2 pt-3 px-8 w-fit rounded-t-2xl text-primary-light hover:bg-[#191919]/75 cursor-pointer font-medium transition-all duration-300">
-                    <Link href="/" className="!no-underline">
-                        Open3 Chat
-                    </Link>
+        <>
+            <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+                <div className="relative shrink-0 flex gap-2 w-full justify-center">
+                    <Tabs
+                        tabs={[
+                            { id: "home", label: "Open3", link: "/", permanent: true, active: pathname.trim() == "/" },
+                            ...tabs
+                        ]}
+                        onTabChange={() => {
+                            const lsTabs = getTabs(localStorage);
+                            for (let i = 0; i < lsTabs.length; i++) {
+                                lsTabs[i].active = lsTabs[i].link == pathname;
+                                if (lsTabs[i].active) break;
+                            }
+                            setTabs(lsTabs);
+                        }}
+                        onTabCreate={() => setShowPalette(true)}
+                        onTabClose={tab => {
+                            let lsTabs = getTabs(localStorage);
+                            const idx = lsTabs.findIndex(t => t.id == tab.id);
+                            if (idx === -1 && lsTabs.length) {
+                                let tabIdx: number;
+                                if (idx >= lsTabs.length) tabIdx = lsTabs.length - 1;
+                                else tabIdx = idx;
+                                router.replace(lsTabs[tabIdx].link ?? "/");
+                            } else if (lsTabs.length) {
+                                lsTabs.splice(idx, 1);
+                            }
+
+                            lsTabs = lsTabs.map(t => {
+                                t.active = t.link === pathname;
+                                return t;
+                            });
+                            setTabs(lsTabs);
+                        }}
+                    />
+                    <div className="h-full w-fit ml-auto">
+                        <UserComponent />
+                    </div>
                 </div>
-                <div className="pb-2 pt-3 px-6 w-fit cursor-pointer rounded-t-2xl bg-[#191919] font-bold flex justify-center items-center gap-12 relative overflow-visible transition-all duration-300">
-                    Test Chat
-                    <svg width="15" height="15" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path opacity="0.35" d="M1.38281 1.18701L9.80078 9.6052M1.38281 9.6052L9.80078 1.18723" stroke="white" strokeOpacity="0.64" strokeWidth="1.75" />
-                    </svg>
-                </div>
-                <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 flex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
-                    Discord.JS bot
-                </div>
-                <div className="pb-2 pt-3 px-[calc((48px+24px)/2)] w-fit cursor-pointer rounded-t-2xl hover:bg-[#191919]/75 lex justify-center items-center py-6 text-neutral-200/65 transition-all duration-300">
-                    Markdown show-off
-                </div> */}
-            <div className="relative flex-shrink-0 flex gap-2 w-full justify-center">
-                <TabInterface onTabChange={(id) => {
-                    console.log(id)
-                }} tabs={tabs} />
-                <div className="pl-4 pr-6 h-full w-fit ml-auto">
-                    <Suspense fallback={<LoadingUserComponent />}>
-                        <SignedIn>
-                            <UserComponent />
-                        </SignedIn>
-                        <SignedOut>
-                            <div className="flex gap-4">
-                                <SignInButton />
-                                <SignUpButton />
-                            </div>
-                        </SignedOut>
-                    </Suspense>
-                </div>
-            </div>
-            {/* </div> */}
-        </nav>
+            </nav>
+            <ChatPalette onDismiss={() => setShowPalette(false)} hidden={!showPalette} className="" />
+        </>
     )
 }
 
-function LoadingUserComponent() {
-    return (
-        <div className="flex gap-4 items-center">
-            <span className="text-transparent w-[28px] h-[28px] rounded-full bg-white/15">.</span>
-        </div>
-    )
-}
-
-async function UserComponent() {
-    const { userId } = await auth()
-
-    if (!userId) {
-        return <div>Sign in to view this</div>
-    }
-
-    const user = await currentUser()
-    if (!user) return <div>Whoops! Something went wrong!</div>
-
+function UserComponent() {
     return (
         <>
             <SignedOut>
@@ -75,7 +156,7 @@ async function UserComponent() {
                 <SignUpButton />
             </SignedOut>
             <SignedIn>
-                <div className="flex gap-4 items-center">
+                <div className="pt-1 min-w-[68px]">
                     <UserButton appearance={{
                         baseTheme: dark,
                         elements: {
@@ -85,10 +166,20 @@ async function UserComponent() {
                             }
                         }
                     }} />
-                    {/*user.hasImage ? <Image src={user.imageUrl} width={36} height={36} alt="Profile Picture" className="rounded-full" /> : <></>*/}
                 </div>
             </SignedIn>
+            <ClerkLoading>
+                <LoadingUserComponent />
+            </ClerkLoading>
         </>
+    )
+}
+
+function LoadingUserComponent() {
+    return (
+        <div className="flex gap-4 items-center min-w-[68px] pt-1">
+            <span className="text-transparent w-[28px] h-[28px] rounded-full bg-white/15">.</span>
+        </div>
     )
 }
 
