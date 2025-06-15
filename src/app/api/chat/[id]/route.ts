@@ -1,7 +1,8 @@
 import { Message } from "@/app/lib/types/ai";
-import { chatsOfUsers } from "../route";
-import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
+import { GetChat } from "../route";
+import { NextRequest, NextResponse } from "next/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { USER_CHATS_KEY } from "@/app/lib/redis";
 
 interface ChatResponse {
     id: string;
@@ -11,21 +12,55 @@ interface ChatResponse {
     history: Message[];
 }
 
-export async function GET({ params }: { params: { id: string } }) {
-    const user = await currentUser();
-    if (!user) return NextResponse.json([], { status: 401 });
-    if (user.banned) return NextResponse.json([], { status: 401 });
-
-    const chat = chatsOfUsers.get(user.id)?.get(params.id);
-    if (!chat) {
-        return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    if (!redis) {
+        return NextResponse.json({
+            error: "Redis connection failure"
+        }, { status: 500 });
     }
+
+    const user = await auth();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user.userId) return NextResponse.json({ exists: [] }, { status: 401 });
+
+    const { id } = await params;
+    const rawChat = await redis.hget(USER_CHATS_KEY(user.userId), id);
+    let chat: GetChat | null;
+    try {
+        chat = rawChat ? {
+            ...JSON.parse(rawChat),
+            id: id,
+        } : null;
+    } catch {
+        chat = null;
+    }
+    if (!chat) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
 
     return NextResponse.json({
         id: chat.id,
-        label: chat.model, // Assuming label is the model name for simplicity
+        label: chat.label,
         model: chat.model,
-        provider: "google", // Assuming Google as the provider for this example
-        history: chat.getHistory()
+        provider: chat.provider,
     } as ChatResponse, { status: 200 });
 }
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    if (!redis) {
+        return NextResponse.json({
+            error: "Redis connection failure"
+        }, { status: 500 })
+    }
+
+    const user = await currentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await params;
+    const affected = await redis.hdel(USER_CHATS_KEY(user.id), id);
+    if (!affected) return NextResponse.json({ error: "Failed to delete chat" }, { status: 404 });
+
+    return NextResponse.json({
+        success: "Chat deleted",
+    }, { status: 200 });
+}
+

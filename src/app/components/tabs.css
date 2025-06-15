@@ -55,3 +55,12 @@
     border-bottom-left-radius: 16px;
     box-shadow: -4px 4px 0 rgba(25, 25, 25, 0.40);
 }
+
+/* Hide scrollbar for all browsers */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

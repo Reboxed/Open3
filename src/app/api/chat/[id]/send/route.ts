@@ -1,11 +1,18 @@
-import { Chat } from "@/app/lib/types/ai";
+import { Chat, GeminiChat } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
-import { chatsOfUsers } from "../../route";
 import { currentUser } from "@clerk/nextjs/server";
+import { USER_CHATS_KEY } from "@/app/lib/redis";
+import { GetChat } from "../../route";
 
 export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic"];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    if (!redis) {
+        return NextResponse.json({
+            error: "Redis connection failure"
+        }, { status: 500 });
+    }
+
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
@@ -17,9 +24,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const { id } = await params;
+    const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
+    let chatJson: GetChat | null;
+    try {
+        chatJson = rawChat ? {
+            ...JSON.parse(rawChat),
+            id: id,
+        } : null;
+    } catch {
+        chatJson = null;
+    }
+    if (!chatJson) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
+
     console.log(id, "CHAT ID")
-    const chat: Chat | undefined = chatsOfUsers.get(user.id)?.get(id);
-    if (!chat) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
+    const chat = new GeminiChat([], chatJson.model);
 
     try {
         const stream = await chat.sendStream({
@@ -37,6 +55,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
         });
     } catch (error) {
-        return NextResponse.json({error: 'Failed to generate content', details: (error as Error).message}, { status: 500 });
+        return NextResponse.json({ error: 'Failed to generate content', details: (error as Error).message }, { status: 500 });
     }
 }
