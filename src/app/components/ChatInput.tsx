@@ -196,7 +196,7 @@ export default function ChatInput({ onSend, className, loading, suggestedPrompts
                         <div key={att.filename} className="flex flex-col items-center aspect-square w-[72px] bg-black/15 rounded-2xl shadow-inactive-button cursor-pointer hover:opacity-50 transition-all duration-200 relative">
                             {isImage ? (
                                 <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
-                                    <img src={att.url} alt={att.filename} className="w-full h-full object-cover rounded-2xl" />
+                                    <Image width={128} height={128} src={att.url} alt={att.filename} className="w-full h-full object-cover rounded-2xl" style={{ objectFit: "contain" }} />
                                 </a>
                             ) : (
                                 <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex flex-col items-center justify-center no-underline hover:no-underline text-inherit">
