@@ -1,8 +1,10 @@
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY, USER_FILES_KEY } from "@/app/lib/redis";
 import { GetChat } from "../route";
+import { join } from "path";
+import { unlink } from "fs/promises";
 
 interface ChatResponse {
     id: string;
@@ -56,7 +58,27 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    
+
+    // Delete all files belonging to this chat
+    const USER_FILES_KEY_CONST = USER_FILES_KEY(user.id);
+    const files = await redis.hgetall(USER_FILES_KEY_CONST);
+    const uploadsDir = join(process.cwd(), "public", "uploads");
+    for (const [randomName, fileMetaRaw] of Object.entries(files)) {
+        try {
+            const fileMeta = JSON.parse(fileMetaRaw);
+            if (fileMeta.chat === id) {
+                // Remove file and meta from disk
+                const filePath = join(uploadsDir, randomName);
+                await unlink(filePath).catch(() => {});
+                await unlink(filePath + ".meta.json").catch(() => {});
+                // Remove from redis
+                await redis.hdel(USER_FILES_KEY_CONST, randomName);
+            }
+        } catch (error) {
+            console.error(`Failed to delete file ${randomName} for chat ${id}:`, error);
+        }
+    }
+
     // Use a transaction to delete both chat data and messages
     const result = await redis.multi()
         .hdel(USER_CHATS_KEY(user.id), id)

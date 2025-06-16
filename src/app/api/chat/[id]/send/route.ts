@@ -5,7 +5,6 @@ import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_FIL
 import { GetChat } from "../../route";
 import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { join } from "path";
-import { readFile } from "fs/promises";
 //import { URL_PREFIX } from "@/app/api/upload/route";
 
 // Helper to load file data for an attachment and return parts to inject
@@ -15,10 +14,31 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
     const { join } = await import("path");
     const nulledLookupKey = GET_LOOKUP_KEY(userId, null, originalName);
     let randomName = await redis.get(nulledLookupKey);
+    let foundWithNull = false;
     if (!randomName) {
         const chatLookupKey = GET_LOOKUP_KEY(userId, chatId, originalName);
         randomName = await redis.get(chatLookupKey);
         if (!randomName) return [];
+    } else {
+        foundWithNull = true;
+    }
+    // If found with null, update lookup to chatId and delete null lookup
+    if (foundWithNull) {
+        const chatLookupKey = GET_LOOKUP_KEY(userId, chatId, originalName);
+        await redis.set(chatLookupKey, randomName);
+        await redis.del(nulledLookupKey);
+        // Also update the file meta to set chat to chatId if it was null
+        const file = await redis.hget(USER_FILES_KEY(userId), randomName);
+        if (file) {
+            let fileMeta;
+            try { fileMeta = JSON.parse(file); } catch { fileMeta = null; }
+            if (fileMeta && (fileMeta.chat === null || fileMeta.chat === undefined)) {
+                await redis.hset(USER_FILES_KEY(userId), randomName, JSON.stringify({
+                    ...fileMeta,
+                    chat: chatId,
+                }));
+            }
+        }
     }
     let fileMeta = null;
     const file = await redis.hget(USER_FILES_KEY(userId), randomName);
@@ -140,97 +160,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const chat = new GeminiChat(existingMessages, chatJson.model);
 
-    // Save user message to Redis
+    // Save user message to Redis (only file paths in attachments, no file data in parts)
     const userMessage: Message = {
         role: "user",
         parts: [{ text: prompt }],
         attachments: attachments.length > 0 ? attachments : undefined
     };
 
-    // Prepare file data for attachments and inject into parts (do not store file data in Redis)
-    for (let i = 0; i < (userMessage.attachments ?? []).length; i++) {
-        const attachment = userMessage.attachments?.[i];
-        if (!attachment || !attachment.filename) continue;
-        const originalName = attachment.filename;
-        const nulledLookupKey = GET_LOOKUP_KEY(user.id, null, originalName);
-        let randomName = await redis.get(nulledLookupKey);
-        let foundWithNull = true;
-        if (!randomName) {
-            const chatLookupKey = GET_LOOKUP_KEY(user.id, chatJson.id, originalName);
-            randomName = await redis.get(chatLookupKey);
-            foundWithNull = false;
-            if (!randomName) continue;
-        }
-        const chatLookupKey = GET_LOOKUP_KEY(user.id, chatJson.id, originalName);
-        if (foundWithNull) {
-            await redis.set(chatLookupKey, randomName);
-            await redis.del(nulledLookupKey);
-        }
-        const file = await redis.hget(USER_FILES_KEY(user.id), randomName);
-        let fileMeta = null;
-        if (file) {
-            const fileJson = JSON.parse(file);
-            if (fileJson.chat !== chatJson.id) {
-                await redis.hset(USER_FILES_KEY(user.id), randomName, JSON.stringify({
-                    ...fileJson,
-                    chat: chatJson.id,
-                }));
-            }
-            fileMeta = fileJson;
-        }
-        // Read file from disk and inject into parts (for AI)
-        try {
-            const filePath = join(uploadsDir, randomName);
-            const metaPath = filePath + ".meta.json";
-            const fileBuffer = await readFile(filePath);
-            let meta = fileMeta;
-            try {
-                const metaRaw = await readFile(metaPath, "utf8");
-                meta = JSON.parse(metaRaw);
-            } catch {}
-            const ext = originalName.split('.').pop()?.toLowerCase() || "";
-            const isImage = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"].includes(ext);
-            if (isImage) {
-                userMessage.parts.push({
-                    inlineData: {
-                        mimeType: meta?.mimeType || "unknown",
-                        data: fileBuffer.toString("base64")
-                    }
-                });
-            } else {
-                let text = null;
-                try {
-                    text = fileBuffer.toString("utf8");
-                    if (/^[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(text)) {
-                        throw new Error('Binary content');
-                    }
-                } catch {
-                    text = null;
-                }
-                const fileType = meta?.mimeType ?? "unknown";
-                const fileSize = fileBuffer.length;
-                const fileInfo = `[File: ${originalName} (${fileType}, ${(fileSize / 1024).toFixed(1)}KB)]`;
-                if (text) {
-                    userMessage.parts.push({
-                        text: `${fileInfo}\nContent:\n${text}`
-                    });
-                } else {
-                    const metadata = {
-                        type: fileType,
-                        size: fileSize,
-                        name: originalName
-                    };
-                    userMessage.parts.push({
-                        text: `${fileInfo}\nMetadata: ${JSON.stringify(metadata, null, 2)}`
-                    });
-                }
-            }
-        } catch (error) {
-            userMessage.parts.push({
-                text: `[Failed to process file: ${originalName}]`
-            });
+    // Prepare runtime message for AI: clone userMessage and inject loaded file data into parts
+    const runtimeUserMessage: Message = {
+        ...userMessage,
+        parts: [...userMessage.parts],
+    };
+    if (userMessage.attachments && userMessage.attachments.length > 0) {
+        const runtimePartsArrays = await Promise.all(
+            userMessage.attachments.map(att =>
+                att && att.filename
+                    ? getAttachmentParts({ userId: user.id, chatId: chatJson.id, originalName: att.filename, uploadsDir })
+                    : Promise.resolve([])
+            )
+        );
+        for (const parts of runtimePartsArrays) {
+            runtimeUserMessage.parts.push(...parts);
         }
     }
+
+    // Store only the original userMessage (no loaded file data) in Redis
+    await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(userMessage));
 
     try {
         if (!chatJson.label) {
@@ -240,13 +196,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
         }
 
-        const stream = await chat.sendStream(userMessage);
-        await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify({
-            ...userMessage,
-            // Only store file paths in attachments, not file data
-            parts: [{ text: prompt }],
-        }));
-
+        const stream = await chat.sendStream(runtimeUserMessage);
         const genResult = await redis.set(CHAT_GENERATING_KEY(chatJson.id), "1", "EX", 60).catch((err) => {
             console.error(err);
             return null;

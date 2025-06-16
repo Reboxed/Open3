@@ -22,7 +22,6 @@ export async function GET(
 
     // O(1) lookup for the file key
     const lookupKey = GET_LOOKUP_KEY(userId, chatId == "global" ? null : chatId, originalFileName);
-    console.log(lookupKey, " :: ", userId, ",", chatId, ",", originalFileName);
     const fileKey = await redis.get(lookupKey);
     if (!fileKey) {
         return NextResponse.json({ error: "File not found or access denied" }, { status: 404 });

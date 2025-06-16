@@ -93,8 +93,6 @@ export async function GET(_: NextRequest) {
                             ...chat,
                             label: finalTitle,
                         } as GetChat));
-
-                        console.log(`Generated title for chat ${chatId}: ${finalTitle}`);
                     } catch (error) {
                         console.error(`Error generating title for chat ${chatId}:`, error);
                         

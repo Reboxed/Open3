@@ -68,8 +68,14 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
-    const onRemoveAttachment = (filename: string) => {
+    const onRemoveAttachment = async (filename: string) => {
         setAttachments(prev => prev.filter(a => a.filename !== filename));
+        // Attempt to delete the uploaded file via API (nulled lookup key)
+        try {
+            await fetch(`/api/upload?filename=${encodeURIComponent(filename)}`, { method: "DELETE" });
+        } catch (error) {
+            console.error("Failed to delete attachment:", filename, error);
+        }
     };
 
     const onSubmitForm = async (e?: React.FormEvent) => {
@@ -125,14 +131,14 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
                                 <option>Gemini 2.5 Flash</option>
                                 <option>Gemini 2 Pro</option>
                             </select>
-                            <button onClick={() => setSearch(!search)}
+                            {/* <button onClick={() => setSearch(!search)}
                                 className={`max-sm:hidden ${search ? "text-neutral-50 bg-primary shadow-active-button" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full px-4 py-1.5 min-w-fit cursor-pointer transition-all duration-200`}
                             >Search</button>
                             <button onClick={() => setMakeImage(!makeImage)}
                                 className={`max-sm:hidden ${makeImage ? "text-neutral-50 bg-primary shadow-active-button" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full px-4 py-1.5 min-w-fit cursor-pointer transition-all duration-200`}
                             >
                                 Make image
-                            </button>
+                            </button> */}
                             <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
                                 className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}
                             >

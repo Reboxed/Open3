@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
             user: user.id,
             chat: null,
         }));
-        console.log(lookupKey, " :: ", user.id, ",", null, ",", randomName);
         await redis.set(lookupKey, randomName);
 
         //const url = `${URL_PREFIX}${randomName}`;
@@ -96,5 +95,32 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    const user = await currentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const filename = req.nextUrl.searchParams.get('filename');
+    if (!filename) {
+        return NextResponse.json({ error: "Filename required" }, { status: 400 });
+    }
+    // Find the nulled lookup key
+    const lookupKey = GET_LOOKUP_KEY(user.id, null, filename);
+    const randomName = await redis.get(lookupKey);
+    if (!randomName) {
+        return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+    const filePath = join(uploadsDir, randomName);
+    try {
+        await unlink(filePath).catch(() => {});
+        await unlink(filePath + ".meta.json").catch(() => {});
+        await redis.del(lookupKey);
+        await redis.hdel(USER_FILES_KEY(user.id), randomName);
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        return NextResponse.json({ error: "Failed to delete file" }, { status: 500 });
     }
 }

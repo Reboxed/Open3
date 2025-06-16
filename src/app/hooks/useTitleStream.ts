@@ -42,7 +42,7 @@ export default function useTitleStream() {
                 setError("Received empty title from server.");
                 return;
             }
-            console.log(`Received title for chat ${chatId}: ${title}`);
+            
             setTitles((prev) => {
                 const titlesCopy = new Map(prev);
                 titlesCopy.set(chatId, title);

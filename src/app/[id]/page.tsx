@@ -38,8 +38,21 @@ export default function Chat() {
         if (!tabId) return;
         async function loadInitial() {
             const serverMessages = await fetchMessages();
-            console.log("Loaded messages from server:", serverMessages.messages);
             setMessages(prev => [prev, serverMessages.messages].flat());
+            // Instantly scroll to bottom after initial messages load
+            setTimeout(() => {
+                const messagesElement = messagesRef.current;
+                if (messagesElement) {
+                    programmaticScrollRef.current = true;
+                    window.scrollTo({
+                        top: messagesElement.scrollHeight,
+                        behavior: "auto"
+                    });
+                    setTimeout(() => {
+                        programmaticScrollRef.current = false;
+                    }, 100);
+                }
+            }, 0);
         }
         loadInitial();
     }, [tabId, fetchMessages]);
@@ -166,53 +179,49 @@ export default function Chat() {
     }
 
     return (
-        <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
-            <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
-                <div ref={topSentinelRef} style={{ height: 1 }} />
-                {messagesLoading ? (
-                    <div className="col-span-2 flex justify-center items-center py-8">
-                        <span className="text-neutral-400">Loading messages...</span>
-                    </div>
-                ) : (
-                    <>
-                        {messages.map((message, idx) => (
-                            <MessageBubble key={`${message.role}-${idx}`} message={message} />
-                        ))}
-                    </>
-                )}
-                {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
-                    <div className="col-span-2 flex justify-center items-center py-8">
-                        <span className="text-neutral-400">Generating...</span>
-                    </div>
-                )}
-            </div>
-            {!autoScroll && (
+        <>
+            {generating && autoScroll && (
                 <button
-                    onClick={handleScrollToBottom}
-                    className="fixed bottom-6 right-6 z-50 bg-white/15 hover:bg-white/25 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
-                    aria-label="Scroll to bottom"
+                    onClick={handleStopAutoScroll}
+                    className="z-50 top-18 backdrop-blur-2xl sticky left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
+                    aria-label="Stop automatic scroll"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 13l-7 7-7-7M12 20V4" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
+                    Stop automatic scroll
                 </button>
             )}
-            <div className="w-full flex flex-col justify-around items-center gap-4 max-w-[1000px] sticky bottom-6">
-                {generating && autoScroll && (
+            <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
+                <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
+                    <div ref={topSentinelRef} style={{ height: 1 }} />
+                    {!messagesLoading && (
+                        <>
+                            {messages.map((message, idx) => (
+                                <MessageBubble key={`${message.role}-${idx}`} message={message} />
+                            ))}
+                        </>
+                    )}
+                    {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
+                        <div className="col-span-2 flex justify-start items-start py-8">
+                            <span className="text-neutral-400">...</span>
+                        </div>
+                    )}
+                </div>
+                {/* {!autoScroll && (
                     <button
-                        onClick={handleStopAutoScroll}
-                        className="z-50 bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
-                        aria-label="Stop automatic scroll"
+                        onClick={handleScrollToBottom}
+                        className="fixed bottom-6 right-6 z-50 bg-white/15 hover:bg-white/25 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
+                        aria-label="Scroll to bottom"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 13l-7 7-7-7M12 20V4" />
                         </svg>
-                        Stop automatic scroll
                     </button>
-                )}
+                )} */}
                 <ChatInput onSend={onSend} loading={generating} className="w-[80%] max-md:w-[90%] max-w-[1000px]" />
             </div>
-        </div>
+        </>
     );
 }
 
