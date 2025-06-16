@@ -14,8 +14,7 @@ export default function Home() {
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
 
-    async function onSend(msg: string) {
-        sessionStorage.setItem("temp-new-tab-msg", msg)
+    async function onSend(msg: string, attachments: { url: string; filename: string }[] = []) {
         setIsLoading(true);
 
         const chat = await fetch("/api/chat", {
@@ -31,6 +30,7 @@ export default function Home() {
             return;
         }
 
+        sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, tabId: chat.id }));
         addTabs(localStorage, {
             id: chat.id,
             link: `/${chat.id}`
@@ -44,7 +44,7 @@ export default function Home() {
 
     const auth = useClerk();
     return (
-        <div className="min-w-full min-h-full flex flex-col justify-center items-center">
+        <div className="min-w-full min-h-0 flex-1 flex flex-col justify-center items-center">
             <div className="flex flex-col gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
                 <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
                 <ChatInput onSend={onSend} loading={isLoading || isPending} className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`} />

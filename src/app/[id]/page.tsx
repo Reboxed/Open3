@@ -61,6 +61,17 @@ export default function Chat() {
     }, [messages, messagesLoading, autoScroll]);
 
     useEffect(() => {
+        const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
+        if (tempNewMsg) {
+            try {
+                const parsedMsg = JSON.parse(tempNewMsg); 
+                if (parsedMsg.tabId === tabId) {
+                    onSend(parsedMsg.message, parsedMsg.attachments || []);
+                    sessionStorage.removeItem("temp-new-tab-msg");
+                }
+            } catch { }
+        }
+
         let lastScrollY = window.scrollY;
         function handleScroll() {
             if (programmaticScrollRef.current) {
@@ -209,6 +220,10 @@ const MessageBubble = ({ message }: { message: Message }) => {
         ? "px-6 py-4 rounded-2xl bg-white/[0.06] mb-2 justify-self-end"
         : "p-2 mb-2";
 
+    // Get chatId from params for attachment URLs
+    const params = useParams();
+    const chatId = params.id?.toString() ?? "";
+
     // Memoize Markdown rendering for performance
     const renderedMarkdown = useMemo(() => {
         // Only apply syntax highlighting for model messages
@@ -238,13 +253,15 @@ const MessageBubble = ({ message }: { message: Message }) => {
                 <div className="relative flex flex-wrap gap-2 mt-3 justify-self-end">
                     {message.attachments.map(att => {
                         const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
+                        // Use virtual attachment URL
+                        const attachmentUrl = `/attachments/${chatId}/${encodeURIComponent(att.filename)}`;
                         return isImage ? (
-                            <a key={att.url} href={att.url} target="_blank" rel="noopener noreferrer" className="block">
-                                <Image src={att.url} alt={att.filename} width={128} height={128} className="max-h-32 max-w-xs rounded-xl" style={{ objectFit: "cover" }} />
+                            <a key={att.filename} href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block">
+                                <Image src={attachmentUrl} alt={att.filename} width={128} height={128} className="max-h-32 max-w-xs rounded-xl" style={{ objectFit: "cover" }} />
                                 {/* <div className="truncate text-xs text-center text-neutral-50/80">{att.filename}</div> */}
                             </a>
                         ) : (
-                            <a key={att.url} href={att.url} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 bg-black/10 rounded px-2 py-1 text-xs">
+                            <a key={att.filename} href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 bg-black/10 rounded px-2 py-1 text-xs">
                                 {att.filename}
                             </a>
                         );

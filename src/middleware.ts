@@ -1,6 +1,15 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export default clerkMiddleware();
+export default function middleware(req: NextRequest, event: any) {
+    const url = req.nextUrl;
+    // Block direct access to /uploads and its subpaths
+    if (url.pathname.startsWith('/uploads')) {
+        return new NextResponse('Forbidden', { status: 403 });
+    }
+    return clerkMiddleware()(req, event);
+}
 
 export const config = {
     matcher: [

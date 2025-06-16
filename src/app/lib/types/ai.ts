@@ -48,61 +48,8 @@ export class GeminiChat implements Chat {
 
         this.history.push(message);
 
-        // Prepare message parts including attachments
+        // message.parts already contains all file data, so just use as-is
         const messageParts = [...message.parts];
-        if (message.attachments && message.attachments.length > 0) {
-            for (const att of message.attachments) {
-                try {
-                    const fullUrl = new URL(att.url, process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').toString();
-                    const response = await fetch(fullUrl);
-                    const blob = await response.blob();
-
-                    if (/\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename)) {
-                        // Handle images
-                        const arrayBuffer = await blob.arrayBuffer();
-                        const base64 = Buffer.from(arrayBuffer).toString('base64');
-                        messageParts.push({
-                            inlineData: {
-                                mimeType: blob.type,
-                                data: base64
-                            }
-                        });
-                    } else {
-                        // Handle all other file types
-                        const fileType = blob.type;
-                        const fileSize = blob.size;
-                        const fileInfo = `[File: ${att.filename} (${fileType}, ${(fileSize / 1024).toFixed(1)}KB)]`;
-
-                        // Try to read as text first
-                        try {
-                            const text = await blob.text();
-                            // Check if the text is readable (not binary)
-                            if (/^[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(text)) {
-                                throw new Error('Binary content');
-                            }
-                            messageParts.push({ 
-                                text: `${fileInfo}\nContent:\n${text}` 
-                            });
-                        } catch (textError) {
-                            // If text reading fails, try to get file metadata
-                            const metadata = {
-                                type: fileType,
-                                size: fileSize,
-                                name: att.filename
-                            };
-                            messageParts.push({ 
-                                text: `${fileInfo}\nMetadata: ${JSON.stringify(metadata, null, 2)}` 
-                            });
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing file:', error);
-                    messageParts.push({ 
-                        text: `[Failed to process file: ${att.filename}]` 
-                    });
-                }
-            }
-        }
 
         const result = await chat.sendMessageStream({
             message: messageParts,

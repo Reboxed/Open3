@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { FormEventHandler, useEffect, useRef, useState } from "react";
+import { URLSearchParams } from "url";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
 type ChatInputProps = {
@@ -9,12 +10,11 @@ type ChatInputProps = {
      * @returns the new value to set the input field to after. Default is "".
     **/
     onSend?: (message: string, attachments: { url: string; filename: string }[]) => OptionalReturn<string>;
-    suggestedPrompts?: string[];
     className?: string;
     loading?: boolean;
 };
 
-export default function ChatInput({ onSend, className, loading, suggestedPrompts }: ChatInputProps) {
+export default function ChatInput({ onSend, className, loading }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState("");
