@@ -50,7 +50,6 @@ export function Navbar() {
         if (!tab.id) return tab.label ?? "New Chat";
         
         // Streaming title takes precedence over API title
-        console.log(streamingTitles)
         const streamingTitle = streamingTitles.get(tab.id);
         if (streamingTitle !== undefined) {
             return streamingTitle || "Generating title...";

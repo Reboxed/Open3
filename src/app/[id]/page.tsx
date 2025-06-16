@@ -92,7 +92,6 @@ export default function Chat() {
 
         function generateTitle() {
             // Start title generation if this is the first message and chat doesn't have a title
-            console.log(messages.length)
             if (messages.length === 0) {
                 console.log("Starting title generation for chat:", tabId);
                 fetch(`/api/chat/title/generate?id=${tabId}`)
