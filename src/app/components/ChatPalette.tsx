@@ -33,6 +33,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     });
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const pendingDeleteTimeout = useRef<NodeJS.Timeout | null>(null);
+    const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+    const [isTouchDevice, setIsTouchDevice] = useState(false);
+    const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const touchStartRef = useRef<{ chatId: string; startTime: number } | null>(null);
+    const [longPressActive, setLongPressActive] = useState<string | null>(null);
 
     const { data, isLoading, mutate } = useSWR("/api/chat", async path => {
         return fetch(path).then(res => res.json() as Promise<GetChatsResponse | ApiError>);
@@ -76,15 +82,25 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }
     }, []);
 
+    // Detect touch device
+    useEffect(() => {
+        const checkTouchDevice = () => {
+            setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+        };
+        checkTouchDevice();
+        window.addEventListener('resize', checkTouchDevice);
+        return () => window.removeEventListener('resize', checkTouchDevice);
+    }, []);
+
     const router = useRouter();
     function createTab(chat: GetChat) {
-        onDismiss();
         addTabs(localStorage, {
             id: chat.id,
             label: chat.label ?? "New Tab",
             link: `/${chat.id}`
         });
         router.push(`/${chat.id}`);
+        onDismiss();
     }
 
     // Keyboard navigation
@@ -93,7 +109,23 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (e.key == "Escape") {
                 e.preventDefault();
                 e.stopPropagation();
-                onDismiss();
+
+                if (bulkDeleteMode || selectedChatIds.size > 0) {
+                    setBulkDeleteMode(false);
+                    setSelectedChatIds(new Set());
+                    return;
+                }
+
+                const chat = localChats.chats[selected[0]];
+                if (chat && pendingDeleteId === chat.id && !deletingId) {
+                    setPendingDeleteId("");
+                    if (pendingDeleteTimeout.current) {
+                        clearTimeout(pendingDeleteTimeout.current);
+                        pendingDeleteTimeout.current = null;
+                    }
+                } else if (!chat || pendingDeleteId !== chat.id) {
+                    onDismiss();
+                }
             }
             if (e.key == "ArrowDown") {
                 e.preventDefault();
@@ -116,16 +148,35 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (e.key == "Enter") {
                 e.preventDefault();
                 e.stopPropagation();
+
+                if (bulkDeleteMode && selectedChatIds.size > 0) {
+                    handleBulkDelete();
+                    return;
+                }
+
                 const chat = localChats.chats[selected[0]];
                 if (!chat) return;
-                createTab(chat);
+                if (pendingDeleteId === chat.id && !deletingId) {
+                    if (pendingDeleteTimeout.current) {
+                        clearTimeout(pendingDeleteTimeout.current);
+                        pendingDeleteTimeout.current = null;
+                    }
+                    handleDelete(chat.id);
+                } else if (!chat || pendingDeleteId !== chat.id) {
+                    createTab(chat);
+                }
             }
-            if (e.key === "Delete" || e.key === "Backspace") {
+            if (e.key === "Delete" || (e.shiftKey && e.key === "Backspace")) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                if (bulkDeleteMode && selectedChatIds.size > 0) {
+                    handleBulkDelete();
+                    return;
+                }
+
                 const chat = localChats.chats[selected[0]];
                 if (!chat) return;
-                console.log(pendingDeleteId, deletingId)
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
                         clearTimeout(pendingDeleteTimeout.current);
@@ -148,14 +199,31 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         if (hiddenOuter) {
             window.onkeydown = null;
         } else {
-            inputRef.current?.focus();
+            if (!isTouchDevice) inputRef.current?.focus();
             window.onkeydown = onKeyDown;
         }
         return () => {
             if (window.onkeydown === onKeyDown) window.onkeydown = null;
+            // Clean up touch timeout
+            if (touchTimeoutRef.current) {
+                clearTimeout(touchTimeoutRef.current);
+                touchTimeoutRef.current = null;
+            }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hiddenOuter, localChats.chats, pendingDeleteId, onDismiss, selected, hidden]);
+    }, [hiddenOuter, localChats.chats, pendingDeleteId, onDismiss, selected, hidden, isTouchDevice, bulkDeleteMode, selectedChatIds]);
+
+    // Clean up touch timeouts when bulk mode changes
+    useEffect(() => {
+        if (!bulkDeleteMode) {
+            if (touchTimeoutRef.current) {
+                clearTimeout(touchTimeoutRef.current);
+                touchTimeoutRef.current = null;
+            }
+            touchStartRef.current = null;
+            setLongPressActive(null);
+        }
+    }, [bulkDeleteMode]);
 
     // Reset pendingDeleteId if selection changes
     useEffect(() => {
@@ -186,6 +254,57 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const onInput: FormEventHandler<HTMLInputElement> = (event) => {
         const value = event.currentTarget.value;
         setShowLabel(!value.length);
+    };
+
+    // Handle bulk delete
+    const handleBulkDelete = async () => {
+        if (selectedChatIds.size === 0) return;
+
+        const chatIdsToDelete = Array.from(selectedChatIds);
+        setBulkDeleteMode(false);
+        setSelectedChatIds(new Set());
+
+        // Add delete animation class to all selected chats
+        chatIdsToDelete.forEach(id => setDeletingId(id));
+
+        setTimeout(async () => {
+            try {
+                const result = await fetch('/api/chat/bulk-delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatIds: chatIdsToDelete })
+                }).then(res => res.json());
+
+                if (!result.success) {
+                    console.error('Bulk delete failed:', result.error);
+                    return;
+                }
+
+                // Update local state
+                setLocalChats(prev => {
+                    const newChats = prev.chats.filter(c => !chatIdsToDelete.includes(c.id));
+
+                    // Adjust selection if needed
+                    if (chatIdsToDelete.includes(localChats.chats[selected[0]]?.id)) {
+                        const newIdx = Math.min(selected[0], newChats.length - 1);
+                        setSelected([Math.max(0, newIdx), 0]);
+                    }
+
+                    // Dismiss palette if no chats left
+                    if (newChats.length === 0) {
+                        setTimeout(() => onDismiss(), 0);
+                    }
+
+                    return { ...prev, chats: newChats };
+                });
+
+                mutate(); // revalidate SWR
+            } catch (error) {
+                console.error('Failed to delete chats:', error);
+            } finally {
+                setDeletingId(null);
+            }
+        }, DELETE_ANIMATION_DURATION);
     };
 
     // Handle delete with animation
@@ -294,6 +413,26 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     transform: translateX(50px) scale(0.95);
                     transition: opacity ${DELETE_ANIMATION_DURATION}ms, transform ${DELETE_ANIMATION_DURATION}ms;
                 }
+                
+                .chat-long-press {
+                    animation: pulse-selection 0.5s ease-out;
+                }
+                
+                @keyframes pulse-selection {
+                    0% { 
+                        transform: scale(1);
+                        background-color: rgba(59, 130, 246, 0.1);
+                    }
+                    50% { 
+                        transform: scale(1.02);
+                        background-color: rgba(59, 130, 246, 0.3);
+                    }
+                    100% { 
+                        transform: scale(1);
+                        background-color: rgba(59, 130, 246, 0.2);
+                    }
+                }
+                
                 /* Custom scrollbar styles for chat list */
                 ul::-webkit-scrollbar {
                     width: 8px;
@@ -353,6 +492,31 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         {shortcutLabel}
                     </div>
                 </div>
+                {bulkDeleteMode && (
+                    <div className="flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 items-center justify-between backdrop-blur-2xl shadow-highlight rounded-2xl">
+                        <div className="text-neutral-300/80 text-sm">
+                            {selectedChatIds.size} chat{selectedChatIds.size !== 1 ? 's' : ''} selected
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    setBulkDeleteMode(false);
+                                    setSelectedChatIds(new Set());
+                                }}
+                                className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-xl text-sm text-neutral-200/80 hover:bg-white/20 transition-all duration-200 cursor-pointer"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={selectedChatIds.size === 0}
+                                className="bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed px-4 py-2 rounded-xl text-sm text-white transition-all duration-200 cursor-pointer"
+                            >
+                                Delete Selected
+                            </button>
+                        </div>
+                    </div>
+                )}
                 <div
                     className={`
                     flex bg-[rgba(36,36,36,0.75)] items-center justify-stretch
@@ -362,91 +526,228 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 `}
                 >
                     <ul ref={listRef} className="flex flex-col items-stretch justify-stretch w-full max-h-[calc(5*64px)] overflow-y-auto overflow-x-clip transition-all duration-200 relative">
-                        <div
-                            ref={selectedRef}
-                            className="h-[64px] bg-white/5 w-full absolute rounded-2xl text-transparent select-none pointer-events-none shadow-highlight-sm transition-all duration-200"
-                            style={{ top: `var(--top-pos, 0px)` }}
-                        />
-                        {localChats.chats.map((chat, idx) => (
-                            <li key={chat.id}
-                                className={`
-                                    p-4 h-[64px] flex gap-4 items-center text-neutral-50/80 w-full cursor-pointer ${idx !== selected[0] ? "hover:bg-white/[0.03]" : ""} rounded-2xl transition-all duration-200 overflow-clip
+                        {!bulkDeleteMode && !isTouchDevice && (
+                            <div
+                                ref={selectedRef}
+                                className="h-[64px] bg-white/5 w-full absolute rounded-2xl text-transparent select-none pointer-events-none shadow-highlight-sm transition-all duration-200"
+                                style={{ top: `var(--top-pos, 0px)` }}
+                            />
+                        )} 
+                        {localChats.chats.map((chat, idx) => {
+                            const isSelected = selectedChatIds.has(chat.id);
+                            const isDeleting = deletingId === chat.id;
+                            const isLongPressing = longPressActive === chat.id;
+
+                            return (
+                                <li key={chat.id}
+                                    className={`
+                                    p-4 h-[64px] flex gap-4 items-center text-neutral-50/80 w-full cursor-pointer 
+                                    ${isSelected ? "bg-blue-500/20 border border-blue-500/50" : idx !== selected[0] ? "hover:bg-white/[0.03]" : ""} 
+                                    rounded-2xl transition-all duration-200 overflow-clip
                                     hover:[&>#delete]:!opacity-100 hover:[&>#delete]:!translate-0 
-                                    ${deletingId === chat.id ? "chat-delete-anim" : ""}
+                                    ${isDeleting ? "chat-delete-anim" : ""}
+                                    ${isLongPressing ? "chat-long-press" : ""}
                                 `}
-                                style={{}}
-                                onClick={e => {
-                                    const clickTarget = e.target as HTMLElement;
-                                    if (
-                                        clickTarget.id === "delete" ||
-                                        clickTarget.parentElement?.id === "delete" ||
-                                        clickTarget.parentElement?.parentElement?.id === "delete"
-                                    ) return;
-                                    createTab(chat);
-                                }}
-                            >
-                                <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center">
-                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M4.16406 10.0234C4.16406 11.9098 5.69369 13.4394 7.58008 13.4395H11.8271L10.8408 12.2803L12.1416 11.1729L14.749 14.2383L12.1416 17.3037L10.8408 16.1973L11.7334 15.1475H7.58008C4.75049 15.1474 2.45703 12.853 2.45703 10.0234V2.75H4.16406V10.0234Z" fill="white" />
-                                        <mask id="mask0_3179_681" style={{ maskType: "alpha" }} maskUnits="userSpaceOnUse" x="1" y="1" width="17" height="18">
-                                            <path d="M1.13281 11.7737C1.90193 14.6132 4.49496 16.7033 7.57812 16.7034H9.0332L9.83105 17.3821L11.1318 18.4885L11.5566 18.8499H1.13281V11.7737ZM17.2637 18.8499H12.8662L13.3242 18.3118L15.9316 15.2463L16.7891 14.2385L15.9316 13.2307L13.3242 10.1653L12.3164 8.97974L11.1309 9.98853L9.83008 11.0959L8.9043 11.884H7.57812C6.55094 11.884 5.71796 11.0508 5.71777 10.0237V1.41528H17.2637V18.8499Z" fill="white" />
-                                        </mask>
-                                        <g mask="url(#mask0_3179_681)">
-                                            <path d="M11.5449 13.4551H5.96484V11.748H11.5449V13.4551Z" fill="white" />
-                                            <path d="M12.9707 10.4727H5.96484V8.76562H12.9707V10.4727Z" fill="white" />
-                                            <path d="M11.5449 7.49512H5.96484V5.78809H11.5449V7.49512Z" fill="white" />
-                                            <path d="M14.7471 4.51855H5.96484V2.81055H14.7471V4.51855Z" fill="white" />
-                                        </g>
-                                    </svg>
-                                </div>
-                                {chat.label ?? "New Chat"}
-                                <div
-                                    id="delete"
+                                    onTouchStart={e => {
+                                        if (!isTouchDevice) return;
+                                        
+                                        const target = e.target as HTMLElement;
+                                        if (
+                                            target.id === "delete" ||
+                                            target.parentElement?.id === "delete" ||
+                                            target.parentElement?.parentElement?.id === "delete"
+                                        ) return;
+
+                                        touchStartRef.current = {
+                                            chatId: chat.id,
+                                            startTime: Date.now()
+                                        };
+
+                                        // Start long press timer (500ms)
+                                        touchTimeoutRef.current = setTimeout(() => {
+                                            if (touchStartRef.current?.chatId === chat.id) {
+                                                // Add long press animation
+                                                setLongPressActive(chat.id);
+                                                
+                                                // Trigger haptic feedback if available
+                                                if ('vibrate' in navigator) {
+                                                    navigator.vibrate(50);
+                                                }
+                                                
+                                                // Enter bulk mode and select this chat
+                                                setBulkDeleteMode(true);
+                                                setSelectedChatIds(prev => {
+                                                    const newSet = new Set(prev);
+                                                    newSet.add(chat.id);
+                                                    return newSet;
+                                                });
+                                                
+                                                // Remove animation after it completes
+                                                setTimeout(() => setLongPressActive(null), 500);
+                                                
+                                                touchStartRef.current = null;
+                                            }
+                                        }, 500);
+                                    }}
+                                    onTouchEnd={e => {
+                                        if (!isTouchDevice) return;
+                                        
+                                        if (touchTimeoutRef.current) {
+                                            clearTimeout(touchTimeoutRef.current);
+                                            touchTimeoutRef.current = null;
+                                        }
+                                        
+                                        setLongPressActive(null);
+                                        
+                                        // If we're in bulk mode, handle tap as selection toggle
+                                        if (bulkDeleteMode && touchStartRef.current) {
+                                            const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                            if (touchDuration < 500) {
+                                                setSelectedChatIds(prev => {
+                                                    const newSet = new Set(prev);
+                                                    if (newSet.has(chat.id)) {
+                                                        newSet.delete(chat.id);
+                                                    } else {
+                                                        newSet.add(chat.id);
+                                                    }
+                                                    return newSet;
+                                                });
+                                            }
+                                        }
+                                        // If touch was released quickly and we're not in bulk mode, it's a tap
+                                        else if (touchStartRef.current && !bulkDeleteMode) {
+                                            const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                            if (touchDuration < 500) {
+                                                createTab(chat);
+                                            }
+                                        }
+                                        
+                                        touchStartRef.current = null;
+                                    }}
+                                    onTouchMove={e => {
+                                        // Cancel long press if user moves finger
+                                        if (touchTimeoutRef.current) {
+                                            clearTimeout(touchTimeoutRef.current);
+                                            touchTimeoutRef.current = null;
+                                        }
+                                        setLongPressActive(null);
+                                        touchStartRef.current = null;
+                                    }}
                                     onClick={e => {
-                                        e.stopPropagation();
-                                        if (deletingId) return;
-                                        if (pendingDeleteId === chat.id) {
-                                            if (pendingDeleteTimeout.current) {
-                                                clearTimeout(pendingDeleteTimeout.current);
-                                                pendingDeleteTimeout.current = null;
-                                            }
-                                            handleDelete(chat.id);
+                                        // Skip click handling on touch devices to avoid conflicts
+                                        if (isTouchDevice) return;
+                                        
+                                        const clickTarget = e.target as HTMLElement;
+                                        if (
+                                            clickTarget.id === "delete" ||
+                                            clickTarget.parentElement?.id === "delete" ||
+                                            clickTarget.parentElement?.parentElement?.id === "delete"
+                                        ) return;
+
+                                        if (e.shiftKey) {
+                                            e.preventDefault();
+                                            // Toggle bulk selection mode
+                                            setBulkDeleteMode(true);
+                                            setSelectedChatIds(prev => {
+                                                const newSet = new Set(prev);
+                                                if (newSet.has(chat.id)) {
+                                                    newSet.delete(chat.id);
+                                                } else {
+                                                    newSet.add(chat.id);
+                                                }
+                                                return newSet;
+                                            });
+                                        } else if (bulkDeleteMode) {
+                                            // In bulk mode, regular click toggles selection
+                                            setSelectedChatIds(prev => {
+                                                const newSet = new Set(prev);
+                                                if (newSet.has(chat.id)) {
+                                                    newSet.delete(chat.id);
+                                                } else {
+                                                    newSet.add(chat.id);
+                                                }
+                                                return newSet;
+                                            });
                                         } else {
-                                            setPendingDeleteId(chat.id);
-                                            if (pendingDeleteTimeout.current) {
-                                                clearTimeout(pendingDeleteTimeout.current);
-                                            }
-                                            pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
+                                            createTab(chat);
                                         }
                                     }}
-                                    style={{
-                                        opacity: idx === selected[0] ? 1 : -1,
-                                        translate: idx === selected[0] ? "0 0" : "50px 0",
-                                        background: pendingDeleteId === chat.id ? '#ef4444' : undefined,
-                                        color: pendingDeleteId === chat.id ? '#fff' : undefined,
-                                        border: pendingDeleteId === chat.id ? '1px solid #ef4444' : undefined,
-                                    }}
-                                    className={`
+                                >
+                                    {bulkDeleteMode && (
+                                        <div className="z-10 w-8 h-8 rounded-xl flex justify-center items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => { }}
+                                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    )}
+                                    <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center">
+                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M4.16406 10.0234C4.16406 11.9098 5.69369 13.4394 7.58008 13.4395H11.8271L10.8408 12.2803L12.1416 11.1729L14.749 14.2383L12.1416 17.3037L10.8408 16.1973L11.7334 15.1475H7.58008C4.75049 15.1474 2.45703 12.853 2.45703 10.0234V2.75H4.16406V10.0234Z" fill="white" />
+                                            <mask id="mask0_3179_681" style={{ maskType: "alpha" }} maskUnits="userSpaceOnUse" x="1" y="1" width="17" height="18">
+                                                <path d="M1.13281 11.7737C1.90193 14.6132 4.49496 16.7033 7.57812 16.7034H9.0332L9.83105 17.3821L11.1318 18.4885L11.5566 18.8499H1.13281V11.7737ZM17.2637 18.8499H12.8662L13.3242 18.3118L15.9316 15.2463L16.7891 14.2385L15.9316 13.2307L13.3242 10.1653L12.3164 8.97974L11.1309 9.98853L9.83008 11.0959L8.9043 11.884H7.57812C6.55094 11.884 5.71796 11.0508 5.71777 10.0237V1.41528H17.2637V18.8499Z" fill="white" />
+                                            </mask>
+                                            <g mask="url(#mask0_3179_681)">
+                                                <path d="M11.5449 13.4551H5.96484V11.748H11.5449V13.4551Z" fill="white" />
+                                                <path d="M12.9707 10.4727H5.96484V8.76562H12.9707V10.4727Z" fill="white" />
+                                                <path d="M11.5449 7.49512H5.96484V5.78809H11.5449V7.49512Z" fill="white" />
+                                                <path d="M14.7471 4.51855H5.96484V2.81055H14.7471V4.51855Z" fill="white" />
+                                            </g>
+                                        </svg>
+                                    </div>
+                                    {chat.label ?? "New Chat"}
+                                    {!bulkDeleteMode && (
+                                        <div
+                                            id="delete"
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                if (deletingId) return;
+                                                if (pendingDeleteId === chat.id) {
+                                                    if (pendingDeleteTimeout.current) {
+                                                        clearTimeout(pendingDeleteTimeout.current);
+                                                        pendingDeleteTimeout.current = null;
+                                                    }
+                                                    handleDelete(chat.id);
+                                                } else {
+                                                    setPendingDeleteId(chat.id);
+                                                    if (pendingDeleteTimeout.current) {
+                                                        clearTimeout(pendingDeleteTimeout.current);
+                                                    }
+                                                    pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
+                                                }
+                                            }}
+                                            style={{
+                                                opacity: idx === selected[0] ? 1 : -1,
+                                                translate: idx === selected[0] ? "0 0" : "50px 0",
+                                                background: pendingDeleteId === chat.id ? '#ef4444' : undefined,
+                                                color: pendingDeleteId === chat.id ? '#fff' : undefined,
+                                                border: pendingDeleteId === chat.id ? '1px solid #ef4444' : undefined,
+                                            }}
+                                            className={`
                                         bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
                                         hover:opacity-100 hover:translate-0 hover:bg-white/20
                                         ${pendingDeleteId === chat.id ? '!bg-red-500 !text-white' : ''}
                                     `}
-                                >
-                                    {pendingDeleteId === chat.id ? (
-                                        // Checkmark SVG
-                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M5 9.5L8 12.5L13 7.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                    ) : (
-                                        // Trash SVG
-                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-all duration-200">
-                                            <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
-                                            <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
-                                        </svg>
+                                        >
+                                            {pendingDeleteId === chat.id ? (
+                                                // Checkmark SVG
+                                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
+                                                </svg>
+                                            ) : (
+                                                // Trash SVG
+                                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-all duration-200">
+                                                    <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
+                                                    <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
+                                                </svg>
+                                            )}
+                                        </div>
                                     )}
-                                </div>
-                            </li>
-                        ))}
+                                </li>
+                            );
+                        })}
                         {loadingMore && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
                                 <span>Loading more...</span>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export type Tab = {
     id: string;
-    label: string;
+    label?: string;
     active?: boolean;
     permanent?: boolean;
     link?: string;

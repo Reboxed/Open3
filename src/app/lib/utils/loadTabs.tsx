@@ -6,9 +6,7 @@ const TABS_LS_NAME = "tabs";
 export function getTabs(localStorage: Storage): Tab[] {
     try {
         const tabs = JSON.parse(localStorage.getItem(TABS_LS_NAME) ?? "[]");
-        if (!(tabs instanceof Array) || !tabs) {
-            return [];
-        }
+        if (!(tabs instanceof Array) || !tabs) return [];
         return tabs as Tab[];
     } catch {
         return [];
@@ -16,7 +14,6 @@ export function getTabs(localStorage: Storage): Tab[] {
 }
 
 export function setTabs(localStorage: Storage, tabs: Tab[]) {
-    // Do not reset all active flags here; let the caller manage which tab is active
     localStorage.setItem(TABS_LS_NAME, JSON.stringify(tabs));
 }
 

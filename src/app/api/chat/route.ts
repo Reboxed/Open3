@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "@/app/lib/types/ai";
-import { Chat, GeminiChat } from "@/app/lib/types/ai";
+import { Chat } from "@/app/lib/types/ai";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
 import "@/app/lib/redis";
 import { createChat } from "@/app/lib/utils/createChat";
 
 export interface CreateChatRequest {
-    label: string;
     model: string;
     provider: string; // Specify the provider
 }
 
 export interface CreateChatResponse {
     id: string;
-    label: string;
+    label?: string;
     model: string;
     provider: string; // Specify the provider
 }
 
 export interface GetChat extends Chat {
     id: string;
+    createdAt?: number;
 }
 
 export interface GetChatsResponse {
@@ -105,10 +105,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
 
-    const { label, provider, model } = await req.json() as CreateChatRequest;
-    if (!label) {
-        return NextResponse.json({ error: 'Label is required' }, { status: 400 });
-    }
+    const { provider, model } = await req.json() as CreateChatRequest;
     if (!model) {
         return NextResponse.json({ error: 'Model is required' }, { status: 400 });
     }
@@ -116,6 +113,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
     }
 
-    const result = await createChat(user.id, { label, model, provider });
+    const result = await createChat(user.id, { model, provider });
     return NextResponse.json(result as CreateChatResponse, { status: 201 });
 }

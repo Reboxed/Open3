@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState } from "react";
+import { NEW_TITLE_EVENT } from "../lib/constants";
 
-function useSSE<T extends object>(url: string) {
+export default function useTitleStream() {
     const [isConnected, setIsConnected] = useState(false);
-    const [messages, setMessages] = useState<(T | {
-        error: boolean;
-        message: string;
-    })[]>([]); // Array to store messages
+    const [titles, setTitles] = useState(new Map<string, string>());
     const [error, setError] = useState<string | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectAttemptsRef = useRef(0);
-    const maxReconnectAttempts = 5;
+    const maxReconnectAttempts = 500;
 
     const connect = () => {
         if (eventSourceRef.current) {
             eventSourceRef.current.close();
         }
 
-        const eventSource = new EventSource(url);
+        const eventSource = new EventSource(`/api/chat/title`);
         eventSourceRef.current = eventSource;
 
         eventSource.onopen = () => {
@@ -26,12 +24,28 @@ function useSSE<T extends object>(url: string) {
         };
 
         eventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                setMessages((prev) => [...prev, data]); // Append new message to the array
-            } catch (err) {
-                console.error("Failed to parse message:", err);
+            const data = event.data as string | null | undefined;
+            const eventSplit = data?.split("::") || [];
+            const chatId = eventSplit[0]?.trim();
+            if (!chatId) {
+                setError("Invalid message format received from server.");
+                return;
             }
+
+            if (eventSplit[1]?.trim() === NEW_TITLE_EVENT) {
+                setTitles((prev) => prev.set(chatId, ""));
+                return;
+            }
+
+            const title = eventSplit.slice(1).join("::").trim();
+            if (title == undefined) {
+                setError("Received empty title from server.");
+                return;
+            }
+            console.log(`Received title for chat ${chatId}: ${title}`);
+            const titlesCopy = new Map(titles);
+            titlesCopy.set(chatId, title)
+            setTitles(titlesCopy);
         };
 
         eventSource.onerror = () => {
@@ -44,7 +58,7 @@ function useSSE<T extends object>(url: string) {
 
     const handleReconnect = () => {
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-            const retryTimeout = 1000 * Math.pow(2, reconnectAttemptsRef.current); // Exponential backoff
+            const retryTimeout = 350 * Math.pow(2, reconnectAttemptsRef.current); 
             setTimeout(() => {
                 reconnectAttemptsRef.current += 1;
                 connect();
@@ -56,15 +70,10 @@ function useSSE<T extends object>(url: string) {
 
     useEffect(() => {
         connect();
-
-        return () => {
-            eventSourceRef.current?.close(); // Clean up connection on unmount
-        };
+        return () => { eventSourceRef.current?.close() };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [url]);
+    }, []);
 
-    return { isConnected, messages, error };
+    return { isConnected, titles, error };
 };
-
-export default useSSE;
 

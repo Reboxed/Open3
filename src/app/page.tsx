@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import ChatInput from "./components/ChatInput";
 import { useRouter } from "next/navigation";
+import 'highlight.js/styles/github-dark.css'; // Change to preferred style
 import { CreateChatResponse, CreateChatRequest } from "./api/chat/route";
 import { ApiError } from "@/app/lib/types/api";
 import { addTabs } from "./lib/utils/loadTabs";
@@ -13,11 +14,6 @@ export default function Home() {
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
 
-    // Dynamically import highlight.js CSS only on mount
-    useEffect(() => {
-        import('highlight.js/styles/github-dark.css');
-    }, []);
-
     async function onSend(msg: string) {
         sessionStorage.setItem("temp-new-tab-msg", msg)
         setIsLoading(true);
@@ -25,7 +21,6 @@ export default function Home() {
         const chat = await fetch("/api/chat", {
             method: "POST",
             body: JSON.stringify({
-                label: "New Chat",
                 model: "gemini-2.0-flash",
                 provider: "google",
             } as CreateChatRequest),
@@ -38,7 +33,6 @@ export default function Home() {
 
         addTabs(localStorage, {
             id: chat.id,
-            label: chat.label,
             link: `/${chat.id}`
         });
 
@@ -53,7 +47,7 @@ export default function Home() {
         <div className="min-w-full min-h-full flex flex-col justify-center items-center">
             <div className="flex flex-col gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
                 <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
-                <ChatInput onSend={onSend} loading={isLoading || isPending} className={`w-full opacity-100 opacity-50 ${(isLoading || isPending) ? "!opacity-35" : ""} transition-opacity duration-500 overflow-clip`} />
+                <ChatInput onSend={onSend} loading={isLoading || isPending} className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`} />
                 <div className="grid grid-cols-4 gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121] [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip">
                     <div className="w-full h-full aspect-square">
                         <span className="!text-white line-clamp-1">Pygame bouncing ball in spinning</span>

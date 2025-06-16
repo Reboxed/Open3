@@ -1,8 +1,8 @@
 import { Message } from "@/app/lib/types/ai";
-import { GetChat } from "../route";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { USER_CHATS_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, MESSAGES_KEY } from "@/app/lib/redis";
+import { GetChat } from "../route";
 
 interface ChatResponse {
     id: string;
@@ -44,7 +44,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     } as ChatResponse, { status: 200 });
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failure"
@@ -56,8 +56,18 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const affected = await redis.hdel(USER_CHATS_KEY(user.id), id);
-    if (!affected) return NextResponse.json({ error: "Failed to delete chat" }, { status: 404 });
+    
+    // Use a transaction to delete both chat data and messages
+    const result = await redis.multi()
+        .hdel(USER_CHATS_KEY(user.id), id)
+        .zrem(USER_CHATS_INDEX_KEY(user.id), id)
+        .del(MESSAGES_KEY(id))
+        .exec();
+    
+    // Check if chat deletion was successful (first operation)
+    if (!result || result[0][1] === 0) {
+        return NextResponse.json({ error: "Failed to delete chat" }, { status: 404 });
+    }
 
     return NextResponse.json({
         success: "Chat deleted",

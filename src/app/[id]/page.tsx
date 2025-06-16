@@ -11,32 +11,40 @@ import { Message } from "../lib/types/ai";
 import { escape } from "html-escaper";
 import rehypeClassAll from "../lib/utils/rehypeClassAll";
 import { useParams } from "next/navigation";
+import { loadMessagesFromServer, migrateMessagesFromLocalStorage } from "../lib/utils/messageUtils";
 
 export default function Chat() {
     const params = useParams();
     const tabId = params.id?.toString() ?? "";
-    const MESSAGES_ID = `messages-${tabId}`;
 
     const [messages, setMessages] = useState<Message[]>([]);
     const messagesRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [messagesLoading, setMessagesLoading] = useState(true);
     const eventSourceRef = useRef<EventSource | null>(null);
 
+    // Load messages from Redis when component mounts or tabId changes
     useEffect(() => {
-        const savedMessages = localStorage.getItem(MESSAGES_ID);
-        if (savedMessages) {
-            setMessages(JSON.parse(savedMessages));
+        async function loadMessages() {
+            if (!tabId) return;
+            
+            setMessagesLoading(true);
+            
+            // First, try to migrate any existing localStorage messages
+            await migrateMessagesFromLocalStorage(tabId);
+            
+            // Then load messages from Redis
+            const serverMessages = await loadMessagesFromServer(tabId);
+            setMessages(serverMessages);
+            setMessagesLoading(false);
         }
+        
+        loadMessages();
     }, [tabId]);
 
+    // Auto-scroll when messages change
     useEffect(() => {
-        if (messages.length != 0 || !localStorage.getItem(MESSAGES_ID)) {
-            if (!messages.length) {
-                localStorage.removeItem(MESSAGES_ID);
-                return;
-            }
-
-            localStorage.setItem(MESSAGES_ID, JSON.stringify(messages));
+        if (!messagesLoading && messages.length > 0) {
             const messagesElement = messagesRef.current;
             if (messagesElement) {
                 window.scrollTo({
@@ -45,9 +53,10 @@ export default function Chat() {
                 })
             }
         }
-    }, [messages, tabId]);
+    }, [messages, messagesLoading]);
 
     function onSend(message: string) {
+        // Add user message optimistically to UI
         const userMessage: Message = { role: "user", parts: [{ text: message }] };
         setMessages(prev => [...prev, userMessage]);
         setIsLoading(true);
@@ -74,23 +83,63 @@ export default function Chat() {
             });
         };
 
+        function generateTitle() {
+            // Start title generation if this is the first message and chat doesn't have a title
+            console.log(messages.length)
+            if (messages.length === 0) {
+                console.log("Starting title generation for chat:", tabId);
+                fetch(`/api/chat/title/generate?id=${tabId}`)
+                    .then(async response => {
+                        if (!response.ok) {
+                            throw new Error(`Failed to start title generation: ${response.statusText}`);
+                        }
+                        const message = await response.json();
+                        if ("title" in message) {
+                            console.log("Fallback title generation started successfully:", message.title);
+                            // Emit window event to update title in Navbar
+                            window.dispatchEvent(new CustomEvent('chatTitleUpdate', {
+                                detail: {
+                                    chatId: tabId,
+                                    title: message.title
+                                }
+                            }));
+                        }
+                    })
+                    .catch(error => {
+                        console.warn('Failed to start title generation:', error);
+                    });
+            }
+        }
+
         eventSource.onerror = () => {
             eventSource.close();
             setIsLoading(false);
+            generateTitle();
+            // Reload messages from server in case of error to sync state
+            loadMessagesFromServer(tabId).then(setMessages);
         };
 
         eventSource.addEventListener("done", () => {
             eventSource.close();
             setIsLoading(false);
+            generateTitle();
+            // Reload messages from server to ensure we have the latest state
+            loadMessagesFromServer(tabId).then(setMessages);
         });
     }
 
     return (
         <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6 gap-8">
             <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
-                {messages.map((message, idx) => (
-                    <MessageBubble key={`${message.role}-${idx}`} message={message} />
-                ))}
+                {messagesLoading ? (
+                    <div className="col-span-2 flex justify-center items-center py-8">
+                        <span className="text-neutral-400">Loading messages...</span>
+                    </div>
+                ) : (
+                    messages.map((message, idx) => (
+                        <MessageBubble key={`${message.role}-${idx}`} message={message} />
+                    ))
+                )}
             </div>
             <ChatInput onSend={onSend} loading={isLoading} className="w-[80%] max-md:w-[90%] max-w-[min(80%,1000px)]" />
         </div>

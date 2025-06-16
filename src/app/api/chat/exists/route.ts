@@ -21,9 +21,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ exists: [] }, { status: 400 });
     }
 
-    console.log("Checking existence of chat IDs:", ids);
     const chatList = await redis.zrange(USER_CHATS_INDEX_KEY(user.userId), 0, -1);
-    console.log("Chat List:", chatList);
     // Return an array of booleans for each id
     const exists = ids.map(id => chatList.includes(id));
     return NextResponse.json({ exists });
