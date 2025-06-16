@@ -27,18 +27,25 @@ export default function Chat() {
     useEffect(() => {
         async function loadMessages() {
             if (!tabId) return;
-            
+
             setMessagesLoading(true);
-            
+
             // First, try to migrate any existing localStorage messages
             await migrateMessagesFromLocalStorage(tabId);
-            
+
             // Then load messages from Redis
             const serverMessages = await loadMessagesFromServer(tabId);
             setMessages(serverMessages);
             setMessagesLoading(false);
+
+            const tempMessage = sessionStorage.getItem("temp-new-tab-msg");
+            if (tempMessage && !serverMessages.length) {
+                onSend(tempMessage);
+            } else {
+                sessionStorage.removeItem("temp-new-tab-msg");
+            }
         }
-        
+
         loadMessages();
     }, [tabId]);
 
