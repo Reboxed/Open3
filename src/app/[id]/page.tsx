@@ -188,14 +188,22 @@ export default function Chat() {
         }
     }
 
-    function onSend(message: string) {
+    function onSend(message: string, attachments: { url: string; filename: string }[] = []) {
         // Add user message optimistically to UI
-        const userMessage: Message = { role: "user", parts: [{ text: message }] };
+        const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
         setMessages(prev => [...prev, userMessage]);
         setIsLoading(true);
 
+        // Save message to server
+        fetch(`/api/chat/${tabId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: userMessage }),
+        });
+
         if (eventSourceRef.current) eventSourceRef.current.close();
-        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}`);
+        const attachmentsParam = attachments.length > 0 ? `&attachments=${encodeURIComponent(JSON.stringify(attachments))}` : '';
+        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}${attachmentsParam}`);
         eventSourceRef.current = eventSource;
 
         let assistantMessage = "";
@@ -275,7 +283,8 @@ export default function Chat() {
                         ))}
                     </>
                 )}
-                {!isLoading && !messagesLoading && messages?.[messages.length-1]?.role != "model" && (
+                {/* Generating indicator: only show if isLoading is true and last message is not from model */}
+                {isLoading && (!messages[messages.length-1] || messages[messages.length-1]?.role !== "model") && (
                     <div className="col-span-2 flex justify-center items-center py-8">
                         <span className="text-neutral-400">Generating...</span>
                     </div>
@@ -326,7 +335,7 @@ const MessageBubble = ({ message }: { message: Message }) => {
             <Markdown
                 skipHtml={isUser}
                 unwrapDisallowed={true}
-                rehypePlugins={rehypePlugins}
+                rehypePlugins={rehypePlugins as any}
                 remarkPlugins={[remarkGfm]}
             >
                 {isUser ? escape(message.parts[0].text) : message.parts[0].text}
@@ -337,6 +346,23 @@ const MessageBubble = ({ message }: { message: Message }) => {
     return (
         <div className={`${className} max-w-full min-w-0`}>
             {renderedMarkdown}
+            {message.attachments && message.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                    {message.attachments.map(att => {
+                        const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
+                        return isImage ? (
+                            <a key={att.url} href={att.url} target="_blank" rel="noopener noreferrer" className="block">
+                                <img src={att.url} alt={att.filename} className="max-h-32 max-w-xs rounded shadow border bg-white" style={{ display: 'inline-block' }} />
+                                <div className="truncate text-xs text-center text-neutral-50/80">{att.filename}</div>
+                            </a>
+                        ) : (
+                            <a key={att.url} href={att.url} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 bg-black/10 rounded px-2 py-1 text-xs">
+                                {att.filename}
+                            </a>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };

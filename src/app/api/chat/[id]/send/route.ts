@@ -23,6 +23,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
+    // Get attachments from the request
+    const attachmentsParam = searchParams.get('attachments');
+    const attachments = attachmentsParam ? JSON.parse(attachmentsParam) : [];
+
     const isGenerating = await redis.get(CHAT_GENERATING_KEY(id));
     if (isGenerating) {
         return NextResponse.json({ error: "You're already generating in this chat." }, { status: 400 });
@@ -53,7 +57,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Save user message to Redis
     const userMessage: Message = {
         role: "user",
-        parts: [{ text: prompt }]
+        parts: [{ text: prompt }],
+        attachments: attachments.length > 0 ? attachments : undefined
     };
 
     try {
