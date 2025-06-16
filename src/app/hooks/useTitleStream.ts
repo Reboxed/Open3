@@ -43,9 +43,11 @@ export default function useTitleStream() {
                 return;
             }
             console.log(`Received title for chat ${chatId}: ${title}`);
-            const titlesCopy = new Map(titles);
-            titlesCopy.set(chatId, title)
-            setTitles(titlesCopy);
+            setTitles((prev) => {
+                const titlesCopy = new Map(prev);
+                titlesCopy.set(chatId, title);
+                return titlesCopy;
+            });
         };
 
         eventSource.onerror = () => {

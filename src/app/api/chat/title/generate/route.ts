@@ -1,11 +1,10 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { GetChat } from "../../route";
-import redis, { MESSAGES_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
+import redis, { CHAT_MESSAGES_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
 import { Message } from "@/app/lib/types/ai";
 import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { GoogleGenAI, PartUnion } from "@google/genai";
-import { NEW_TITLE_EVENT } from "@/app/lib/constants";
 import { TITLE_PROMPT } from "@/constants";
 
 export async function GET(req: NextRequest) {
@@ -40,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (chat.label) return NextResponse.json({ error: "Chat already has a title" }, { status: 400 });
 
     // load first msg
-    const messageStrings = await redis.lrange(MESSAGES_KEY(id), 0, 2);
+    const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, 2);
     const messages: string[] = [];
     for (const messageString of messageStrings) {
         try {

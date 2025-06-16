@@ -1,7 +1,7 @@
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, MESSAGES_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY } from "@/app/lib/redis";
 import { GetChat } from "../route";
 
 interface ChatResponse {
@@ -61,7 +61,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     const result = await redis.multi()
         .hdel(USER_CHATS_KEY(user.id), id)
         .zrem(USER_CHATS_INDEX_KEY(user.id), id)
-        .del(MESSAGES_KEY(id))
+        .del(CHAT_MESSAGES_KEY(id))
         .exec();
     
     // Check if chat deletion was successful (first operation)

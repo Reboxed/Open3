@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ChatInput from "../components/ChatInput";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,49 +18,175 @@ export default function Chat() {
     const tabId = params.id?.toString() ?? "";
 
     const [messages, setMessages] = useState<Message[]>([]);
+    const [offset, setOffset] = useState(0); // Offset from the end (0 = most recent)
+    const [limit, setLimit] = useState(25);
+    const [total, setTotal] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
     const messagesRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(true);
     const eventSourceRef = useRef<EventSource | null>(null);
+    const [autoScroll, setAutoScroll] = useState(true);
+    const programmaticScrollRef = useRef(false);
+    const [initialLoad, setInitialLoad] = useState(true);
+    const topSentinelRef = useRef<HTMLDivElement>(null);
+    const [pageHistory, setPageHistory] = useState<number[]>([]); // Track loaded page offsets
 
-    // Load messages from Redis when component mounts or tabId changes
-    useEffect(() => {
-        async function loadMessages() {
-            if (!tabId) return;
-
-            setMessagesLoading(true);
-
-            // First, try to migrate any existing localStorage messages
-            await migrateMessagesFromLocalStorage(tabId);
-
-            // Then load messages from Redis
-            const serverMessages = await loadMessagesFromServer(tabId);
-            setMessages(serverMessages);
-            setMessagesLoading(false);
-
-            const tempMessage = sessionStorage.getItem("temp-new-tab-msg");
-            if (tempMessage && !serverMessages.length) {
-                onSend(tempMessage);
-            } else {
-                sessionStorage.removeItem("temp-new-tab-msg");
-            }
+    // Helper to load messages with pagination
+    const fetchMessages = useCallback(async (newOffset = 0, append = false) => {
+        setMessagesLoading(true);
+        const serverMessages = await loadMessagesFromServer(tabId, newOffset, limit);
+        setTotal(serverMessages.total);
+        setOffset(serverMessages.offset);
+        setLimit(serverMessages.limit);
+        setHasMore(serverMessages.total > serverMessages.offset + serverMessages.messages.length);
+        if (append) {
+            setMessages(prev => [...serverMessages.messages, ...prev]);
+            setPageHistory(prev => {
+                const next = [...prev, newOffset];
+                // Only keep the last 2 pages in memory
+                return next.slice(-2);
+            });
+        } else {
+            setMessages(serverMessages.messages);
+            setPageHistory([newOffset]);
         }
+        setIsLoading(serverMessages.generating);
+        setMessagesLoading(false);
+        setInitialLoad(false);
+        return serverMessages;
+    }, [tabId, limit]);
 
-        loadMessages();
-    }, [tabId]);
+    // Load messages on mount/tabId change
+    useEffect(() => {
+        if (!tabId) return;
+        setOffset(0);
+        setInitialLoad(true);
+        async function loadInitial() {
+            await migrateMessagesFromLocalStorage(tabId);
+            const serverMessages = await fetchMessages(0, false);
+            // Auto-load more if viewport fits more than 25 messages
+            setTimeout(() => {
+                if (messagesRef.current && serverMessages.total > serverMessages.messages.length) {
+                    const container = messagesRef.current;
+                    if (container.scrollHeight <= window.innerHeight * 0.8) {
+                        // Load more until filled or all loaded (with a buffer of 10)
+                        let nextOffset = serverMessages.offset + serverMessages.messages.length;
+                        const keepLoading = true;
+                        (async function autoLoad() {
+                            while (keepLoading && nextOffset < serverMessages.total) {
+                                const more = await loadMessagesFromServer(tabId, nextOffset, limit);
+                                setMessages(prev => [...more.messages, ...prev]);
+                                setPageHistory(prev => {
+                                    const next = [...prev, nextOffset];
+                                    return next.slice(-2);
+                                });
+                                nextOffset += more.messages.length;
+                                if (!messagesRef.current || more.messages.length === 0) break;
+                                if (messagesRef.current.scrollHeight > window.innerHeight * 0.8 + 200) break;
+                            }
+                        })();
+                    }
+                }
+            }, 100);
+        }
+        loadInitial();
+    }, [tabId, fetchMessages, limit]);
+
+    // Lazy load previous page when user scrolls to top
+    useEffect(() => {
+        if (!hasMore) return;
+        const sentinel = topSentinelRef.current;
+        if (!sentinel) return;
+        const observer = new window.IntersectionObserver(async (entries) => {
+            if (entries[0].isIntersecting && !messagesLoading && hasMore) {
+                // Load previous page
+                const newOffset = offset + messages.length;
+                await fetchMessages(newOffset, true);
+                // Unload last page if more than 2 pages in memory
+                setMessages(prev => prev.slice(0, limit * 2));
+            }
+        }, { root: null, rootMargin: '0px', threshold: 1.0 });
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [offset, messages, messagesLoading, hasMore, fetchMessages, limit]);
 
     // Auto-scroll when messages change
     useEffect(() => {
-        if (!messagesLoading && messages.length > 0) {
+        if (!messagesLoading && messages.length > 0 && autoScroll) {
             const messagesElement = messagesRef.current;
             if (messagesElement) {
+                programmaticScrollRef.current = true;
                 window.scrollTo({
                     behavior: "smooth",
                     top: messagesElement.scrollHeight,
-                })
+                });
+                // Reset after scroll event fires
+                setTimeout(() => {
+                    programmaticScrollRef.current = false;
+                }, 100);
             }
         }
-    }, [messages, messagesLoading]);
+    }, [messages, messagesLoading, autoScroll]);
+
+    // Listen for user scroll to disable auto-scroll
+    useEffect(() => {
+        let lastScrollY = window.scrollY;
+        function handleScroll() {
+            if (programmaticScrollRef.current) {
+                lastScrollY = window.scrollY;
+                return;
+            }
+            const messagesElement = messagesRef.current;
+            if (!messagesElement) return;
+            const currentScrollY = window.scrollY;
+            const scrollPosition = currentScrollY + window.innerHeight;
+            const bottomThreshold = messagesElement.scrollHeight - 100;
+
+            // If user scrolls up, always cancel auto-scroll
+            if (currentScrollY < lastScrollY) {
+                setAutoScroll(false);
+            } else if (currentScrollY > lastScrollY) {
+                // Only re-enable auto-scroll if user scrolls down and is near the bottom
+                if (scrollPosition >= bottomThreshold) {
+                    setAutoScroll(true);
+                }
+            }
+            lastScrollY = currentScrollY;
+        }
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    // When auto-scroll is triggered programmatically, ignore the next scroll event
+    useEffect(() => {
+        if (autoScroll) {
+            // Set a flag to ignore the next scroll event
+            setTimeout(() => {
+                const event = new Event('scroll');
+                window.dispatchEvent(event);
+            }, 0);
+        }
+    }, [autoScroll]);
+
+    function handleStopAutoScroll() {
+        setAutoScroll(false);
+    }
+
+    function handleScrollToBottom() {
+        const messagesElement = messagesRef.current;
+        if (messagesElement) {
+            programmaticScrollRef.current = true;
+            window.scrollTo({
+                behavior: "smooth",
+                top: messagesElement.scrollHeight,
+            });
+            setTimeout(() => {
+                programmaticScrollRef.current = false;
+            }, 100);
+            setAutoScroll(true);
+        }
+    }
 
     function onSend(message: string) {
         // Add user message optimistically to UI
@@ -68,9 +194,7 @@ export default function Chat() {
         setMessages(prev => [...prev, userMessage]);
         setIsLoading(true);
 
-        if (eventSourceRef.current?.OPEN) return;
         if (eventSourceRef.current) eventSourceRef.current.close();
-
         const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}`);
         eventSourceRef.current = eventSource;
 
@@ -117,36 +241,69 @@ export default function Chat() {
             }
         }
 
-        eventSource.onerror = () => {
+        eventSource.onerror = (error) => {
             eventSource.close();
+            console.error(error);
             setIsLoading(false);
-            generateTitle();
+            //generateTitle();
             // Reload messages from server in case of error to sync state
-            loadMessagesFromServer(tabId).then(setMessages);
+            loadMessagesFromServer(tabId).then(r => setMessages(r.messages));
         };
 
         eventSource.addEventListener("done", () => {
             eventSource.close();
             setIsLoading(false);
-            generateTitle();
+            //generateTitle();
             // Reload messages from server to ensure we have the latest state
-            loadMessagesFromServer(tabId).then(setMessages);
+            loadMessagesFromServer(tabId).then(r => setMessages(r.messages));
         });
     }
 
     return (
         <div className="min-w-full min-h-full flex flex-col justify-between items-center py-6 gap-8">
             <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
-                {messagesLoading ? (
+                <div ref={topSentinelRef} style={{ height: 1 }} />
+                {messagesLoading && initialLoad ? (
                     <div className="col-span-2 flex justify-center items-center py-8">
                         <span className="text-neutral-400">Loading messages...</span>
                     </div>
                 ) : (
-                    messages.map((message, idx) => (
-                        <MessageBubble key={`${message.role}-${idx}`} message={message} />
-                    ))
+                    <>
+                        {/* No more Load more button! */}
+                        {messages.map((message, idx) => (
+                            <MessageBubble key={`${message.role}-${offset + idx}`} message={message} />
+                        ))}
+                    </>
+                )}
+                {!isLoading && !messagesLoading && messages?.[messages.length-1]?.role != "model" && (
+                    <div className="col-span-2 flex justify-center items-center py-8">
+                        <span className="text-neutral-400">Generating...</span>
+                    </div>
                 )}
             </div>
+            {isLoading && autoScroll && (
+                <button
+                    onClick={handleStopAutoScroll}
+                    className="fixed bottom-6 right-6 z-50 bg-red-600 hover:bg-red-500 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
+                    aria-label="Stop automatic scroll"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Stop automatic scroll
+                </button>
+            )}
+            {!autoScroll && (
+                <button
+                    onClick={handleScrollToBottom}
+                    className="fixed bottom-6 right-6 z-50 bg-white/15 hover:bg-white/25 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
+                    aria-label="Scroll to bottom"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 13l-7 7-7-7M12 20V4" />
+                    </svg>
+                </button>
+            )}
             <ChatInput onSend={onSend} loading={isLoading} className="w-[80%] max-md:w-[90%] max-w-[min(80%,1000px)]" />
         </div>
     );
@@ -158,16 +315,28 @@ const MessageBubble = ({ message }: { message: Message }) => {
         ? "px-6 py-4 rounded-2xl bg-white/[0.06] mb-2 col-start-2 justify-self-end"
         : "p-2 mb-2 col-span-2";
 
-    return (
-        <div className={`${className} max-w-full min-w-0`}>
+    // Memoize Markdown rendering for performance
+    const renderedMarkdown = useMemo(() => {
+        // Only apply syntax highlighting for model messages
+        const rehypePlugins = isUser
+            ? [rehypeRaw, [rehypeClassAll, { className: "md" }]]
+            : [rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]];
+        // Flatten plugins array for react-markdown
+        return (
             <Markdown
                 skipHtml={isUser}
                 unwrapDisallowed={true}
-                rehypePlugins={[rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]]}
+                rehypePlugins={rehypePlugins}
                 remarkPlugins={[remarkGfm]}
             >
                 {isUser ? escape(message.parts[0].text) : message.parts[0].text}
             </Markdown>
+        );
+    }, [isUser, message.parts]);
+
+    return (
+        <div className={`${className} max-w-full min-w-0`}>
+            {renderedMarkdown}
         </div>
     );
 };

@@ -1,8 +1,9 @@
 import { GeminiChat, Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, MESSAGES_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
+import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
@@ -15,13 +16,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const { id } = await params;
     const searchParams = req.nextUrl.searchParams;
     const prompt = searchParams.get('prompt');
     if (!prompt) {
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const { id } = await params;
+    const isGenerating = await redis.get(CHAT_GENERATING_KEY(id));
+    if (isGenerating) {
+        return NextResponse.json({ error: "You're already generating in this chat." }, { status: 400 });
+    }
+
     const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
     let chatJson: GetChat | null;
     try {
@@ -35,13 +41,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!chatJson) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
 
     // Load existing messages from Redis to provide context
-    const messageStrings = await redis.lrange(MESSAGES_KEY(id), 0, -1);
+    const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
     const existingMessages: Message[] = messageStrings.map(msgStr => {
         try {
             return JSON.parse(msgStr);
-        } catch {
-            return null;
-        }
+        } catch { return null }
     }).filter(Boolean);
 
     const chat = new GeminiChat(existingMessages, chatJson.model);
@@ -51,22 +55,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         role: "user",
         parts: [{ text: prompt }]
     };
-    await redis.rpush(MESSAGES_KEY(id), JSON.stringify(userMessage));
 
     try {
+        if (existingMessages.length == 0) {
+            const emitted = eventBus.emit(CHAT_TITLE_GENERATE_EVENT, id, [userMessage.parts[0].text]);
+            if (!emitted) {
+                console.log(`Emitting failed for chat ${id}.`);
+            }
+        }
+
         const stream = await chat.sendStream(userMessage);
+        await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(userMessage));
+
+        const genResult = await redis.set(CHAT_GENERATING_KEY(chatJson.id), "1").catch((err) => {
+            console.error(err);
+            return null;
+        });
+        if (!genResult) {
+            // Shouldn't happen unless a user is naughty and bypasses the GUI.
+            return NextResponse.json({ error: "Failed to set generating state" }, { status: 500 })
+        }
 
         // Create a custom readable stream that also saves the AI response
         const transformedStream = new ReadableStream({
             async start(controller) {
                 const reader = stream.getReader();
                 let fullResponse = "";
-                
+
                 try {
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
-                        
+
                         // Parse the chunk to extract the text
                         const chunkText = new TextDecoder().decode(value);
                         if (chunkText.startsWith('data: ')) {
@@ -79,22 +99,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                                 // Ignore JSON parse errors for streaming data
                             }
                         }
-                        
+
                         controller.enqueue(value);
                     }
-                    
+
                     // Save AI response to Redis
                     if (fullResponse) {
                         const aiMessage: Message = {
                             role: "model",
                             parts: [{ text: fullResponse }]
                         };
-                        await redis.rpush(MESSAGES_KEY(id), JSON.stringify(aiMessage));
+                        await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(aiMessage));
                     }
-                    
+
                     controller.close();
                 } catch (error) {
+                    console.error(error);
                     controller.error(error);
+                } finally {
+                    await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {
+                        // This shouldn't hopefully happen or else i will shoot myself
+                        console.error(err);
+                    });
                 }
             }
         });
@@ -108,5 +134,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
     } catch (error) {
         return NextResponse.json({ error: 'Failed to generate content', details: (error as Error).message }, { status: 500 });
+    } finally {
+        await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {
+            // This shouldn't hopefully happen or else i will shoot myself
+            console.error(err);
+        });
     }
 }

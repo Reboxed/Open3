@@ -1,5 +1,5 @@
 import { currentUser } from "@clerk/nextjs/server";
-import redis, { MESSAGES_KEY, USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "../../../lib/redis";
+import redis, { CHAT_MESSAGES_KEY, USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "../../../lib/redis";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function DELETE(req: NextRequest) {
@@ -32,7 +32,7 @@ export async function DELETE(req: NextRequest) {
                 const result = await redis.multi()
                     .hdel(USER_CHATS_KEY(user.id), chatId)
                     .zrem(USER_CHATS_INDEX_KEY(user.id), chatId)
-                    .del(MESSAGES_KEY(chatId))
+                    .del(CHAT_MESSAGES_KEY(chatId))
                     .exec();
 
                 return { chatId, success: true };

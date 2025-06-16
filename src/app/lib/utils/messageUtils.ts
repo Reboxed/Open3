@@ -2,23 +2,33 @@
 
 import { Message } from "../types/ai";
 
-// Load messages from Redis via API
-export async function loadMessagesFromServer(chatId: string): Promise<Message[]> {
+export async function loadMessagesFromServer(chatId: string, offset = 0, limit = 25): Promise<{
+    messages: Message[];
+    generating: boolean;
+    total: number;
+    offset: number;
+    limit: number;
+}> {
     try {
-        const response = await fetch(`/api/chat/${chatId}/messages`);
+        const response = await fetch(`/api/chat/${chatId}/messages?offset=${offset}&limit=${limit}`);
         if (!response.ok) {
             console.error('Failed to load messages:', response.statusText);
-            return [];
+            return { messages: [], generating: false, total: 0, offset, limit };
         }
         const data = await response.json();
-        return data.messages || [];
+        return {
+            messages: data.messages || [],
+            generating: data.generating ?? false,
+            total: data.total ?? 0,
+            offset: data.offset ?? offset,
+            limit: data.limit ?? limit
+        };
     } catch (error) {
         console.error('Error loading messages:', error);
-        return [];
+        return { messages: [], generating: false, total: 0, offset, limit };
     }
 }
 
-// Save a message to Redis via API
 export async function saveMessageToServer(chatId: string, message: Message): Promise<boolean> {
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`, {
@@ -35,7 +45,6 @@ export async function saveMessageToServer(chatId: string, message: Message): Pro
     }
 }
 
-// Clear messages for a chat
 export async function clearMessagesFromServer(chatId: string): Promise<boolean> {
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`, {
@@ -52,17 +61,12 @@ export async function clearMessagesFromServer(chatId: string): Promise<boolean> 
 export async function migrateMessagesFromLocalStorage(chatId: string): Promise<void> {
     const MESSAGES_ID = `messages-${chatId}`;
     const savedMessages = localStorage.getItem(MESSAGES_ID);
-    
+
     if (savedMessages) {
         try {
             const messages: Message[] = JSON.parse(savedMessages);
-            
-            // Save each message to the server
-            for (const message of messages) {
-                await saveMessageToServer(chatId, message);
-            }
-            
-            // Remove from localStorage after successful migration
+            for (const message of messages) await saveMessageToServer(chatId, message)
+
             localStorage.removeItem(MESSAGES_ID);
             console.log(`Migrated ${messages.length} messages for chat ${chatId}`);
         } catch (error) {
