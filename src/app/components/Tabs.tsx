@@ -144,13 +144,14 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {
             // Don't trigger shortcuts in input, textarea, or contenteditable
-            const target = e.target as HTMLElement;
-            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            // const target = e.target as HTMLElement;
+            // if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
             // Debug log
             // console.log('keydown', e.key, e.code, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey);
             // Close tab: Alt/Opt+W
             if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key.toLowerCase() === 'w' || e.code === 'KeyW')) {
                 e.preventDefault();
+                e.stopPropagation();
                 if (tabs[activeTab] && !tabs[activeTab].permanent) {
                     onCloseTabClick(activeTab);
                 }
@@ -159,6 +160,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
             // Next tab: Alt/Opt+Tab
             if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
                 e.preventDefault();
+                e.stopPropagation();
                 let nextIdx = activeTab + 1;
                 if (nextIdx >= tabs.length) nextIdx = 0;
                 if (tabs[nextIdx]) onTabChangeClick(nextIdx);
@@ -167,6 +169,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
             // Previous tab: Alt/Opt+Shift+Tab
             if (e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
                 e.preventDefault();
+                e.stopPropagation();
                 let prevIdx = activeTab - 1;
                 if (prevIdx < 0) prevIdx = tabs.length - 1;
                 if (tabs[prevIdx]) onTabChangeClick(prevIdx);
@@ -191,27 +194,6 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 ref={scrollRef}
                 style={maskStyle}
             >
-                <style jsx>
-                    {`
-                    @keyframes growWidth {
-                      from {
-                        width: 0px;
-                        min-width: 0px;
-                        opacity: 1;
-                      }
-                      to {
-                        width: 100%;
-                        min-width: fit;
-                        opacity: 1;
-                      }
-                    }
-
-                    .animate-grow-width {
-                      animation: growWidth 150ms ease-in-out forwards;
-                    }
-                `}
-                </style>
-
                 {tabs.map((tab, idx) => (
                     <li
                         key={idx}
@@ -220,7 +202,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         className={`
                             flex h-full items-center
                             gap-12 justify-between px-4 pl-5 py-3 min-w-fit
-                            ${tab.permanent ? "!px-[calc((48px+16px)/2)] !max-w-fit" : "w-full"} cursor-pointer rounded-t-2xl font-medium
+                            ${tab.permanent ? "!px-[calc((48px+16px)/2)] !max-w-fit" : ""} cursor-pointer rounded-t-2xl font-medium
                             transition-all duration-250
                             ${activeTab == idx ?
                                 `tab-active z-20 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
