@@ -62,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     };
 
     try {
-        if (existingMessages.length == 0) {
+        if (!chatJson.label) {
             const emitted = eventBus.emit(CHAT_TITLE_GENERATE_EVENT, id, [userMessage.parts[0].text]);
             if (!emitted) {
                 console.log(`Emitting failed for chat ${id}.`);

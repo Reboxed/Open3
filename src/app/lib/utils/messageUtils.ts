@@ -2,34 +2,28 @@
 
 import { Message } from "../types/ai";
 
-export async function loadMessagesFromServer(chatId: string, offset = 0, limit = 25): Promise<{
+export async function loadMessagesFromServer(chatId: string): Promise<{
     messages: Message[];
     generating: boolean;
-    total: number;
-    offset: number;
-    limit: number;
 }> {
     try {
-        const response = await fetch(`/api/chat/${chatId}/messages?offset=${offset}&limit=${limit}`);
+        const response = await fetch(`/api/chat/${chatId}/messages`);
         if (!response.ok) {
             console.error('Failed to load messages:', response.statusText);
-            return { messages: [], generating: false, total: 0, offset, limit };
+            return { messages: [], generating: false };
         }
         const data = await response.json();
         return {
             messages: data.messages || [],
             generating: data.generating ?? false,
-            total: data.total ?? 0,
-            offset: data.offset ?? offset,
-            limit: data.limit ?? limit
         };
     } catch (error) {
         console.error('Error loading messages:', error);
-        return { messages: [], generating: false, total: 0, offset, limit };
+        return { messages: [], generating: false };
     }
 }
 
-export async function saveMessageToServer(chatId: string, message: Message): Promise<boolean> {
+/*export async function saveMessageToServer(chatId: string, message: Message): Promise<boolean> {
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`, {
             method: 'POST',
@@ -43,7 +37,7 @@ export async function saveMessageToServer(chatId: string, message: Message): Pro
         console.error('Error saving message:', error);
         return false;
     }
-}
+}*/
 
 export async function clearMessagesFromServer(chatId: string): Promise<boolean> {
     try {
@@ -54,23 +48,5 @@ export async function clearMessagesFromServer(chatId: string): Promise<boolean> 
     } catch (error) {
         console.error('Error clearing messages:', error);
         return false;
-    }
-}
-
-// Migrate messages from localStorage to Redis (for existing users)
-export async function migrateMessagesFromLocalStorage(chatId: string): Promise<void> {
-    const MESSAGES_ID = `messages-${chatId}`;
-    const savedMessages = localStorage.getItem(MESSAGES_ID);
-
-    if (savedMessages) {
-        try {
-            const messages: Message[] = JSON.parse(savedMessages);
-            for (const message of messages) await saveMessageToServer(chatId, message)
-
-            localStorage.removeItem(MESSAGES_ID);
-            console.log(`Migrated ${messages.length} messages for chat ${chatId}`);
-        } catch (error) {
-            console.error('Error migrating messages:', error);
-        }
     }
 }
