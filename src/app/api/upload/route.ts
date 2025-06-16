@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         if (!file.name || !file.type) {
             return NextResponse.json({ error: "File name or type is missing" }, { status: 400 });
         }
-        const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/svg+xml", "application/json", "application/x-yaml", "application/pdf", "application/octet-stream"];
+        const allowedTypes = ["image/jpeg", "image/png", "image/gif", "application/json", "application/x-yaml", "application/pdf", "application/octet-stream"];
         if (!allowedTypes.includes(file.type) && !file.type.startsWith("text/")) {
             return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
         }
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
         await redis.set(lookupKey, randomName);
 
         //const url = `${URL_PREFIX}${randomName}`;
-        return NextResponse.json({ filename });
+        return NextResponse.json({ filename, url: "/attachments/global/" + filename });
     } catch (error) {
         console.error("Upload error:", error);
         if (filepath) {

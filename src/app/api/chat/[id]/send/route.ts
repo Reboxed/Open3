@@ -8,6 +8,76 @@ import { join } from "path";
 import { readFile } from "fs/promises";
 //import { URL_PREFIX } from "@/app/api/upload/route";
 
+// Helper to load file data for an attachment and return parts to inject
+async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: { userId: string, chatId: string, originalName: string, uploadsDir: string }) {
+    const { GET_LOOKUP_KEY, USER_FILES_KEY } = await import("@/app/lib/redis");
+    const { readFile } = await import("fs/promises");
+    const { join } = await import("path");
+    const nulledLookupKey = GET_LOOKUP_KEY(userId, null, originalName);
+    let randomName = await redis.get(nulledLookupKey);
+    if (!randomName) {
+        const chatLookupKey = GET_LOOKUP_KEY(userId, chatId, originalName);
+        randomName = await redis.get(chatLookupKey);
+        if (!randomName) return [];
+    }
+    let fileMeta = null;
+    const file = await redis.hget(USER_FILES_KEY(userId), randomName);
+    if (file) {
+        try { fileMeta = JSON.parse(file); } catch {}
+    }
+    try {
+        const filePath = join(uploadsDir, randomName);
+        const metaPath = filePath + ".meta.json";
+        const fileBuffer = await readFile(filePath);
+        let meta = fileMeta;
+        try {
+            const metaRaw = await readFile(metaPath, "utf8");
+            meta = JSON.parse(metaRaw);
+        } catch {}
+        const ext = originalName.split('.').pop()?.toLowerCase() || "";
+        const isImage = ["png", "jpg", "jpeg", "gif", "bmp", "webp"].includes(ext);
+        if (isImage) {
+            return [{
+                inlineData: {
+                    filename: originalName,
+                    size: fileBuffer.length,
+                    mimeType: meta?.mimeType || "application/octet-stream",
+                    data: fileBuffer.toString("base64")
+                }
+            }];
+        } else {
+            let text = null;
+            try {
+                text = fileBuffer.toString("utf8");
+                if (/^[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(text)) {
+                    throw new Error('Binary content');
+                }
+            } catch {
+                text = null;
+            }
+            const fileType = meta?.mimeType || "application/octet-stream";
+            const fileSize = fileBuffer.length;
+            const fileInfo = `[File: ${originalName} (${fileType}, ${(fileSize / 1024).toFixed(1)}KB)]`;
+            if (text) {
+                return [{
+                    text: `${fileInfo}\nContent:\n${text}`
+                }];
+            } else {
+                const metadata = {
+                    type: fileType,
+                    size: fileSize,
+                    name: originalName
+                };
+                return [{
+                    text: `${fileInfo}\nMetadata: ${JSON.stringify(metadata, null, 2)}`
+                }];
+            }
+        }
+    } catch {
+        return [{ text: `[Failed to process file: ${originalName}]` }];
+    }
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
         return NextResponse.json({
@@ -55,6 +125,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         } catch { return null }
     }).filter(Boolean);
 
+    // For each message with attachments, reload file data from disk and inject into parts
+    const uploadsDir = join(process.cwd(), "public", "uploads");
+    for (const msg of existingMessages) {
+        if (msg.attachments && msg.attachments.length > 0) {
+            for (const attachment of msg.attachments) {
+                if (!attachment.filename) continue;
+                const parts = await getAttachmentParts({ userId: user.id, chatId: id, originalName: attachment.filename, uploadsDir });
+                if (!msg.parts) msg.parts = [];
+                msg.parts.push(...parts);
+            }
+        }
+    }
+
     const chat = new GeminiChat(existingMessages, chatJson.model);
 
     // Save user message to Redis
@@ -64,12 +147,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         attachments: attachments.length > 0 ? attachments : undefined
     };
 
-    // Prepare file data for attachments and inject into parts
-    const uploadsDir = join(process.cwd(), "public", "uploads");
+    // Prepare file data for attachments and inject into parts (do not store file data in Redis)
     for (let i = 0; i < (userMessage.attachments ?? []).length; i++) {
         const attachment = userMessage.attachments?.[i];
         if (!attachment || !attachment.filename) continue;
-
         const originalName = attachment.filename;
         const nulledLookupKey = GET_LOOKUP_KEY(user.id, null, originalName);
         let randomName = await redis.get(nulledLookupKey);
@@ -97,7 +178,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
             fileMeta = fileJson;
         }
-        // Read file from disk and inject into parts
+        // Read file from disk and inject into parts (for AI)
         try {
             const filePath = join(uploadsDir, randomName);
             const metaPath = filePath + ".meta.json";
@@ -112,23 +193,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             if (isImage) {
                 userMessage.parts.push({
                     inlineData: {
-                        mimeType: meta?.mimeType || "application/octet-stream",
+                        mimeType: meta?.mimeType || "unknown",
                         data: fileBuffer.toString("base64")
                     }
                 });
             } else {
-                // Try to read as text, fallback to metadata
                 let text = null;
                 try {
                     text = fileBuffer.toString("utf8");
-                    // Check for binary content
                     if (/^[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(text)) {
                         throw new Error('Binary content');
                     }
                 } catch {
                     text = null;
                 }
-                const fileType = meta?.mimeType || "application/octet-stream";
+                const fileType = meta?.mimeType ?? "unknown";
                 const fileSize = fileBuffer.length;
                 const fileInfo = `[File: ${originalName} (${fileType}, ${(fileSize / 1024).toFixed(1)}KB)]`;
                 if (text) {
@@ -162,7 +241,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         const stream = await chat.sendStream(userMessage);
-        await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(userMessage));
+        await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify({
+            ...userMessage,
+            // Only store file paths in attachments, not file data
+            parts: [{ text: prompt }],
+        }));
 
         const genResult = await redis.set(CHAT_GENERATING_KEY(chatJson.id), "1", "EX", 60).catch((err) => {
             console.error(err);

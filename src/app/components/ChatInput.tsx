@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEventHandler, useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef, FormEventHandler } from "react";
 import { URLSearchParams } from "url";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
@@ -14,6 +14,18 @@ type ChatInputProps = {
     loading?: boolean;
 };
 
+function ErrorToast({ message, onClose }: { message: string, onClose: () => void }) {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 3500);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+    return (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in">
+            {message}
+        </div>
+    );
+}
+
 export default function ChatInput({ onSend, className, loading }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
@@ -22,6 +34,7 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
     const [search, setSearch] = useState(false);
     const [enableAttachments, setEnableAttachments] = useState(false);
     const [attachments, setAttachments] = useState<{ url: string; filename: string }[]>([]);
+    const [errorToast, setErrorToast] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -38,10 +51,17 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
             const file = files[i];
             const formData = new FormData();
             formData.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: formData });
-            if (res.ok) {
-                const data = await res.json();
-                uploaded.push({ url: data.url, filename: data.filename });
+            try {
+                const res = await fetch("/api/upload", { method: "POST", body: formData });
+                if (res.ok) {
+                    const data = await res.json();
+                    uploaded.push({ url: data.url, filename: data.filename });
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    setErrorToast(err.error || "Upload failed");
+                }
+            } catch (e) {
+                setErrorToast("Upload failed");
             }
         }
         setAttachments(prev => [...prev, ...uploaded]);
@@ -76,6 +96,7 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
         <div className={`bg-[#222121] rounded-[36px] flex flex-col justify-stretch shadow-[inset_0_0_35px_#000,0_8px_20px_rgba(0,0,0,0.1)]/30 sticky bottom-6 max-md:bottom-4 ${className}`} style={{
             backgroundImage: "",
         }}>
+            {errorToast && <ErrorToast message={errorToast} onClose={() => setErrorToast(null)} />}
             <form onSubmit={onSubmitForm}>
                 <div className="bg-[#252424] rounded-[36px] flex flex-col p-6 justify-center cursor-text gap-4 relative shadow-2xl z-5">
                     <label ref={labelRef} htmlFor="chat" className="text-neutral-50/50 absolute top-6 pointer-events-none">Ask anything to us...</label>

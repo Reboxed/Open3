@@ -64,7 +64,7 @@ export default function Chat() {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
         if (tempNewMsg) {
             try {
-                const parsedMsg = JSON.parse(tempNewMsg); 
+                const parsedMsg = JSON.parse(tempNewMsg);
                 if (parsedMsg.tabId === tabId) {
                     onSend(parsedMsg.message, parsedMsg.attachments || []);
                     sessionStorage.removeItem("temp-new-tab-msg");
@@ -186,18 +186,6 @@ export default function Chat() {
                     </div>
                 )}
             </div>
-            {generating && autoScroll && (
-                <button
-                    onClick={handleStopAutoScroll}
-                    className="fixed bottom-6 right-6 z-50 bg-white/15 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
-                    aria-label="Stop automatic scroll"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Stop automatic scroll
-                </button>
-            )}
             {!autoScroll && (
                 <button
                     onClick={handleScrollToBottom}
@@ -209,7 +197,21 @@ export default function Chat() {
                     </svg>
                 </button>
             )}
-            <ChatInput onSend={onSend} loading={generating} className="w-[80%] max-md:w-[90%] max-w-[min(80%,1000px)]" />
+            <div className="w-full flex flex-col justify-around items-center gap-4 max-w-[1000px] sticky bottom-6">
+                {generating && autoScroll && (
+                    <button
+                        onClick={handleStopAutoScroll}
+                        className="z-50 bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
+                        aria-label="Stop automatic scroll"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Stop automatic scroll
+                    </button>
+                )}
+                <ChatInput onSend={onSend} loading={generating} className="w-[80%] max-md:w-[90%] max-w-[1000px]" />
+            </div>
         </div>
     );
 }
@@ -243,6 +245,30 @@ const MessageBubble = ({ message }: { message: Message }) => {
         );
     }, [isUser, message.parts]);
 
+    const AttachmentPreview = ({ att, chatId }: { att: { url: string; filename: string }, chatId: string }) => {
+        const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
+        const [imgSrc, setImgSrc] = React.useState(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
+        React.useEffect(() => {
+            setImgSrc(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
+        }, [chatId, att.filename]);
+        const handleImgError = React.useCallback(() => {
+            setImgSrc(`/attachments/global/${encodeURIComponent(att.filename)}`);
+        }, [att.filename]);
+        if (isImage) {
+            return (
+                <a href={imgSrc} target="_blank" rel="noopener noreferrer" className="block">
+                    <Image src={imgSrc} alt={att.filename} width={128} height={128} className="max-h-32 max-w-xs rounded-xl" style={{ objectFit: "cover" }} onError={handleImgError} />
+                </a>
+            );
+        } else {
+            return (
+                <a href={`/attachments/${chatId}/${encodeURIComponent(att.filename)}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 bg-black/10 rounded px-2 py-1 text-xs">
+                    {att.filename}
+                </a>
+            );
+        }
+    };
+
     return (
         <div className={`${isUser ? "justify-self-end col-start-2 " : "justify-self-start col-span-2"} max-w-full`}>
             <div className={`${className} max-w-full min-w-0`}>
@@ -251,21 +277,9 @@ const MessageBubble = ({ message }: { message: Message }) => {
 
             {message.attachments && message.attachments.length > 0 && (
                 <div className="relative flex flex-wrap gap-2 mt-3 justify-self-end">
-                    {message.attachments.map(att => {
-                        const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
-                        // Use virtual attachment URL
-                        const attachmentUrl = `/attachments/${chatId}/${encodeURIComponent(att.filename)}`;
-                        return isImage ? (
-                            <a key={att.filename} href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block">
-                                <Image src={attachmentUrl} alt={att.filename} width={128} height={128} className="max-h-32 max-w-xs rounded-xl" style={{ objectFit: "cover" }} />
-                                {/* <div className="truncate text-xs text-center text-neutral-50/80">{att.filename}</div> */}
-                            </a>
-                        ) : (
-                            <a key={att.filename} href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 bg-black/10 rounded px-2 py-1 text-xs">
-                                {att.filename}
-                            </a>
-                        );
-                    })}
+                    {message.attachments.map(att => (
+                        <AttachmentPreview key={att.filename} att={att} chatId={chatId} />
+                    ))}
                 </div>
             )}
         </div>
