@@ -33,7 +33,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 
 1. **Clone the repository:**
    ```sh
-   git clone https://github.com/Reboxed/open3.git
+   git clone https://github.com/Reboxed/Open3.git
    cd open3
    ```
 2. **Install dependencies:**
