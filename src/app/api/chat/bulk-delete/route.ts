@@ -29,7 +29,7 @@ export async function DELETE(req: NextRequest) {
         // Delete all chats in parallel
         const deletePromises = chatIds.map(async (chatId: string) => {
             try {
-                const result = await redis.multi()
+                await redis.multi()
                     .hdel(USER_CHATS_KEY(user.id), chatId)
                     .zrem(USER_CHATS_INDEX_KEY(user.id), chatId)
                     .del(CHAT_MESSAGES_KEY(chatId))

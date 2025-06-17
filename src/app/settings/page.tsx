@@ -5,6 +5,7 @@ export default function BYOKSetupPage() {
     const [openaiKey, setOpenaiKey] = useState("");
     const [anthropicKey, setAnthropicKey] = useState("");
     const [geminiKey, setGeminiKey] = useState("");
+    const [openrouterKey, setOpenrouterKey] = useState("");
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -16,6 +17,7 @@ export default function BYOKSetupPage() {
                     setOpenaiKey(data.byok.openaiKey || "");
                     setAnthropicKey(data.byok.anthropicKey || "");
                     setGeminiKey(data.byok.geminiKey || "");
+                    setOpenrouterKey(data.byok.openrouterKey || "");
                 }
             });
     }, []);
@@ -26,7 +28,7 @@ export default function BYOKSetupPage() {
         await fetch("/api/byok", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ openaiKey, anthropicKey, geminiKey }),
+            body: JSON.stringify({ openaiKey, anthropicKey, geminiKey, openrouterKey }),
         });
         setLoading(false);
         setSuccess(true);
@@ -40,7 +42,7 @@ export default function BYOKSetupPage() {
                 <span className="max-w-135"><strong>Inference is expensive!!</strong> I wanted to, at first, release this for free and then $6/mo or summin but i couldn&apos;t get all that done in the time of the hackathon (especially the registrations required for it), BUT I am dedicated to fully even refactor this project after and release it both Open-Source and hosted.</span>
                 <br/>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full max-w-135">
-                    <label className="w-full">
+                    {/* <label className="w-full">
                         <h3>Gemini API Key</h3>
                         <input
                             type="password"
@@ -71,8 +73,18 @@ export default function BYOKSetupPage() {
                             placeholder="claude-..."
                         />
                         (Note: Anthropic is untested because I couldn&apos;t afford it, sorry)
+                    </label> */}
+                    <label className="w-full">
+                        <h3>OpenRouter API Key</h3>
+                        <input
+                            type="password"
+                            className="input input-bordered w-full bg-white/5 p-2 px-4 rounded-2xl"
+                            value={openrouterKey}
+                            onChange={(e) => setOpenrouterKey(e.target.value)}
+                            placeholder="..."
+                        />
                     </label>
-                    <span className="max-w-113 opacity-65">OpenRouter support coming soon!</span>
+                    <span className="max-w-113 opacity-65">Native AI APIs are coming soon (well technically already implemented but its unstable)</span>
                     <button type="submit" className="bg-white/10 py-3 rounded-xl cursor-pointer" disabled={loading}>
                         {loading ? "Saving..." : "Save Keys"}
                     </button>

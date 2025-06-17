@@ -1,4 +1,4 @@
-import { GeminiChat, OpenAIChat, Chat } from "@/app/lib/types/ai";
+import { GeminiChat, OpenAIChat, Chat, OpenRouterChat } from "@/app/lib/types/ai";
 import { AnthropicChat } from "../types/ai";
 
 const SYSTEM_PROMPT = (model: string, provider: string, date: string) => `
@@ -28,6 +28,8 @@ export function getChatClass(provider: string, model: string, history: any[], sy
             return new GeminiChat(history, model, prompt, apiKey);
         case "anthropic":
             return new AnthropicChat(history, model, prompt, apiKey);
+        case "openrouter":
+            return new OpenRouterChat(history, model, prompt, apiKey);
         default:
             throw new Error("Unsupported chat provider: " + provider);
     }

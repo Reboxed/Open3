@@ -7,6 +7,7 @@ import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { NEW_TITLE_EVENT } from "@/app/lib/constants";
 import { TITLE_PROMPT } from "@/constants";
 import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
+import { OpenRouterChat } from "@/app/lib/types/ai";
 
 
 export async function GET(_: NextRequest) {
@@ -63,13 +64,13 @@ export async function GET(_: NextRequest) {
                             controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${NEW_TITLE_EVENT}\n\n`));
                         }
                         // BYOK enforcement for Gemini
-                        const apiKey = getProviderApiKey("google", byok);
+                        const apiKey = getProviderApiKey("openrouter", byok);
                         if (requireByok && !apiKey) {
                             throw new Error("API key required for Gemini (Google)");
                         }
                         const ai = new GoogleGenAI({ apiKey });
                         const result = await ai.models.generateContentStream({
-                            model: "gemini-1.5-flash",
+                            model: OpenRouterChat.getCapabilities().find(m => m.model === ""),
                             config: {
                                 systemInstruction: TITLE_PROMPT,
                             },

@@ -238,10 +238,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                         const chunkText = new TextDecoder().decode(value);
                         if (chunkText.startsWith('data: ')) {
                             try {
-                                const data = JSON.parse(chunkText.slice(6));
-                                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-                                    fullResponse += data.candidates[0].content.parts[0].text;
-                                }
+                                fullResponse += chunkText.slice(6).trim();
                             } catch (e) {
                                 // Ignore JSON parse errors for streaming data
                             }

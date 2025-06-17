@@ -1,5 +1,11 @@
 "use client";
 
+//
+// If you're seeign this code please let me tell you i was the only person working on this project actively
+// trying to carry it with as many features as possible. the moment this cloneathon is over i will rewrite
+// this entire thing. that is. if i win.
+//
+
 import React, { useState, useTransition, useEffect } from "react";
 import ChatInput from "./components/ChatInput";
 import { useRouter } from "next/navigation";

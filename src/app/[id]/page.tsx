@@ -95,8 +95,7 @@ export default function Chat() {
 
         let assistantMessage = "";
         eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            assistantMessage += data.candidates[0].content.parts[0].text;
+            assistantMessage += event.data;
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];

@@ -5,15 +5,16 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const { openaiKey, anthropicKey, geminiKey } = await req.json();
+  const { /* openaiKey, anthropicKey, geminiKey, */ openrouterKey } = await req.json();
   await (await clerkClient()).users.updateUserMetadata(user.id, {
     privateMetadata: {
       ...(user.privateMetadata || {}),
       byok: {
         ...(user.privateMetadata?.byok || {}),
-        openaiKey,
-        anthropicKey,
-        geminiKey,
+        // openaiKey,
+        // anthropicKey,
+        // geminiKey,
+        openrouterKey,
       },
     },
   });
