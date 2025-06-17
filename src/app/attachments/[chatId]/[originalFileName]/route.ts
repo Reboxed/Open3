@@ -11,6 +11,10 @@ export async function GET(
     _: NextRequest,
     { params }: { params: Promise<{ chatId: string; originalFileName: string }> }
 ) {
+    if (!redis) {
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
+    }
+
     const { userId } = await auth();
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
@@ -54,7 +58,8 @@ export async function GET(
                 "Cache-Control": "private, max-age=31536000",
             },
         });
-    } catch {
+    } catch (e) {
+        console.error(`Failed to read file ${filePath}:`, e);
         return NextResponse.json({ error: "File not found" } as ApiError, { status: 404 });
     }
 }

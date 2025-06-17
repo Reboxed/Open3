@@ -1,5 +1,8 @@
 import { OpenAI } from "openai";
 
+// TODO: This should all be moved prooobabbllyyy and adding a model in the future should be as easy as being an admin on the 
+// TODO: Open3 site and just adding it in a GUI.
+
 export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic", "openrouter"];
 
 export interface Message {

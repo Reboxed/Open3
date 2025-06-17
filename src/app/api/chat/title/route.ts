@@ -10,9 +10,7 @@ import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 
 export async function GET(_: NextRequest) {
     if (!redis) {
-        return NextResponse.json({
-            error: "Redis connection failure"
-        } as ApiError, { status: 500 });
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
     const { requireByok, byok, user } = await getUserApiKeys();

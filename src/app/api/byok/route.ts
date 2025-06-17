@@ -7,6 +7,7 @@ export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
   const { /* openaiKey, anthropicKey, geminiKey, */ openrouterKey } = await req.json();
+  
   await (await clerkClient()).users.updateUserMetadata(user.id, {
     privateMetadata: {
       ...(user.privateMetadata || {}),

@@ -12,7 +12,7 @@ type ChatInputProps = {
     **/
     onSend?: (message: string, attachments: { url: string; filename: string }[], model: string, provider: string) => OptionalReturn<string>;
     className?: string;
-    loading?: boolean;
+    generating?: boolean;
     model?: string | null | undefined;
     provider?: string | null | undefined;
     isModelFixed?: boolean;
@@ -31,7 +31,10 @@ function ErrorToast({ message, onClose }: { message: string, onClose: () => void
     );
 }
 
-export default function ChatInput({ onSend, className, loading, isModelFixed = false, model: initialModel, provider: initialProvider, onModelChange }: ChatInputProps) {
+export default function ChatInput({ onSend,
+    className, generating, isModelFixed = false,
+    model: initialModel, provider: initialProvider, onModelChange
+}: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState("");
@@ -95,7 +98,10 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
     }, [modelCapabilities, model, onModelChange, isModelFixed]);
 
     // Find the selected model's capabilities
-    const selectedModel = modelCapabilities?.get(model ?? "") || modelCapabilities?.values().find(m => m.name === model) || modelCapabilities?.get("google/gemini-2.5-flash") || modelCapabilities?.values()?.toArray()?.[0];
+    const selectedModel = modelCapabilities?.get(model ?? "") || // First check if the model is directly set
+        modelCapabilities?.values().find(m => m.name === model) || // Then check if the model name matches the display name?? (idk just in case)
+        modelCapabilities?.get("google/gemini-2.5-flash") || // Fallback to a default model if nothing matches
+        modelCapabilities?.values()?.toArray()?.[0]; // Finally, if gemini also doesn't exist, just use the first one
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -134,7 +140,7 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
 
     const onSubmitForm = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (loading) return;
+        if (generating) return;
         if (!inputValue.trim() && attachments.length === 0) return;
         if (!model || !provider) return;
 
@@ -261,8 +267,8 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
                                 </button>
                             )}
                         </div>
-                        <button type="submit" className="bg-white text-black rounded-full px-4 py-1.5 cursor-pointer font-semibold disabled:opacity-50" disabled={loading}>
-                            {loading ? "Generating" : "Send"}
+                        <button type="submit" className="bg-white text-black rounded-full px-4 py-1.5 cursor-pointer font-semibold disabled:opacity-50" disabled={generating}>
+                            {generating ? "Generating" : "Send"}
                         </button>
                     </div>
                 </div>

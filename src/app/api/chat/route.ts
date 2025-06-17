@@ -10,9 +10,7 @@ import { CreateChatRequest, CreateChatResponse, ChatResponse, GetChatsResponse, 
 
 export async function GET(req: NextRequest) {
     if (!redis) {
-        return NextResponse.json({
-            error: "Redis connection failured"
-        } as ApiError, { status: 500 })
+        return NextResponse.json({ error: "Redis connection failured" } as ApiError, { status: 500 });
     }
 
     const user = await auth();
@@ -73,9 +71,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     if (!redis) {
-        return NextResponse.json({
-            error: "Redis connection failure"
-        } as ApiError, { status: 500 });
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
     const user = await currentUser();

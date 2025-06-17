@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Tabs, { Tab } from "./Tabs";
-import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs";
+import { saveTabsLocally as setTabsS, loadTabsLocally } from "../lib/utils/localStorageTabs";
 import { ClerkLoading, Protect, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { usePathname, useRouter } from "next/navigation";
@@ -109,7 +109,7 @@ export function Navbar() {
 
     // Single effect to sync tabs and clean up deleted ones
     useEffect(() => {
-        const lsTabs = getTabs(localStorage);
+        const lsTabs = loadTabsLocally(localStorage);
         if (pathname.startsWith("/chat/")) {
             let activeFound = false;
             for (let i = 0; i < lsTabs.length; i++) {
@@ -163,7 +163,7 @@ export function Navbar() {
                             }))
                         ]}
                         onTabChange={() => {
-                            const lsTabs = getTabs(localStorage);
+                            const lsTabs = loadTabsLocally(localStorage);
                             for (let i = 0; i < lsTabs.length; i++) {
                                 lsTabs[i].active = lsTabs[i].link == pathname;
                                 if (lsTabs[i].active) break;
@@ -172,7 +172,7 @@ export function Navbar() {
                         }}
                         onTabCreate={() => setShowPalette(true)}
                         onTabClose={tab => {
-                            let lsTabs = getTabs(localStorage);
+                            let lsTabs = loadTabsLocally(localStorage);
                             const idx = lsTabs.findIndex(t => t.id == tab.id);
                             if (idx === -1 && lsTabs.length) {
                                 let tabIdx: number;

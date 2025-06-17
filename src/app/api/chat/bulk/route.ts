@@ -55,7 +55,7 @@ export async function DELETE(req: NextRequest) {
             success: true,
             deleted: successful,
             failed: failed.length,
-            total: chatIds.length
+            total: chatIds.length,
         });
 
     } catch (error) {

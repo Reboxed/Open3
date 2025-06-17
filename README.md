@@ -7,9 +7,14 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Multi-Model Chat:** Seamlessly chat with multiple AI models (OpenAI, Gemini, Anthropic, and more).
 - **File Uploads:** Attach and process files in conversations.
 - **Real-Time Streaming:** Enjoy instant responses with Server-Sent Events (SSE).
-- **Chat Management:** Create, delete, and organize chats with titles and bulk actions.
+- **Chat Management:** Create, delete, search, and organize chats with titles and bulk actions.
+- **Tabs:** Your device has "tabs" of the chats you currently want to see, you can switch bettwn them, close them, open them, etc. Helps with organizing especially across devices.
+- **Works well with keyboard:** Command+k (Ctrl+K) for Chat-Palette, Opt+W (Alt+W) for closing a tab, Opt+Tab/Opt+Shift+Tab (Alt+Tab/Alt+Shift+Tab) for switching to the next/previous tab, **in chat palette** shift+backspace or delete key for deleting a chat, enter for entering a chat (and creating a new tab), shift+click for bulk selecting, etc.
+- **Message copying/deleting/regenerating**
+- **Syntax highlighting and Markdown**
+- **Works well with touch**
 - **BYOK (Bring Your Own Key):** Securely use your own API keys for supported models.
-- **Extensible:** Modular codebase for easy addition of new models and features.
+- **Extensible:** Modular(-ish?) codebase for easy addition of new models and features.
 - **Modern UI:** Responsive, accessible, and beautiful interface.
 
 ## Tech Stack
@@ -60,9 +65,11 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 ## Project Structure
 
 - `src/app/` — Next.js app directory (pages, API routes, components)
-- `src/lib/` — Utilities, Redis, event bus, and helpers
-- `src/constants.ts` — Shared constants
-- `public/` — Static assets and uploads
+- `src/lib/` — Utilities, types, and helpers
+- `src/internal-lib/` — Backend used libraries like reddis, event busses, types, and more.
+- `src/internal-lib/constants.ts` — Shared constants
+- `public/` — Static assets
+- `public/uploads` — Uploads
 
 ## API Routes
 
@@ -70,24 +77,43 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - `/api/models` — List available models
 - `/api/upload` — File uploads
 - `/api/byok` — BYOK endpoints
-- `/api/attachments` — File attachment handling
+- `/attachments` — "Virtual attachment" endpoint
 
 ## Customization & Extensibility
 
-- Add new models in `src/lib/utils/`
+- BYOK functionality
 - Extend chat logic in `src/app/api/chat/`
-- Customize UI in `src/app/components/`
+- Customize UI in `src/app/components/` and `src/app/` (page.tsx/layout.tsx)
 
 ## Contributing
 
 1. Fork the repo
 2. Create a new branch (`git checkout -b feature/your-feature`)
-3. Commit your changes
-4. Push to your fork and open a Pull Request
+3. Follow CONTRIBUTING.md
+4. Commit your changes
+5. Push to your fork and open a Pull Request
+
+## Roadmap
+
+### *Chapter 1:* Right after the cloneathon
+1. A bit of a refactor/touch ups/speed improvements
+2. Implement message editing + chat branching + model switching mid-chat.
+3. Image generation and web search
+4. Pinning favorite models
+5. Chat sharing
+### *Chapter 2:* Publishing
+6. Migration to Reboxed infrastructure and SDKs since by then probably stable (Rebxd Auth, Rebxd Serverless, Rebxd Storage, Rebxd Realtime DB, etc. What is Rebxd? Right now not yet launched but check out our [Discord](https://discord.gg/xsBn7D9n6K) and YouTube (@rebxdcloud) so yeah)
+7. Adding captchas
+8. Clerk billing integration
+9. Posthog for analytics
+10. Mobile app! (We have some really talented mobile devs on the team including me too)
+11. Chat sharing and "collaborative chatting" — what that is y'all will find out soon 👀 
+
+And that's as far as I want to plan, more detailed roadmap soon!
 
 ## License
 
-MIT
+Apache 2.0
 
 ---
 

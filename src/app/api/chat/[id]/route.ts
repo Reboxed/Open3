@@ -6,6 +6,7 @@ import { join } from "path";
 import { unlink } from "fs/promises";
 import { ApiError } from "@/internal-lib/types/api";
 
+// TODO: Move this into constants.ts, didnt feel like it
 interface ChatResponse {
     id: string;
     label: string;
@@ -16,9 +17,7 @@ interface ChatResponse {
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
-        return NextResponse.json({
-            error: "Redis connection failure"
-        } as ApiError, { status: 500 });
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
     const user = await auth();
@@ -48,14 +47,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
-        return NextResponse.json({
-            error: "Redis connection failure"
-        }, { status: 500 })
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
     const user = await currentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     const { id } = await params;
 
@@ -88,11 +85,9 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     
     // Check if chat deletion was successful (first operation)
     if (!result || result[0][1] === 0) {
-        return NextResponse.json({ error: "Failed to delete chat" }, { status: 404 });
+        return NextResponse.json({ error: "Failed to delete chat" } as ApiError, { status: 404 });
     }
 
-    return NextResponse.json({
-        success: "Chat deleted",
-    }, { status: 200 });
+    return NextResponse.json({ success: "Chat deleted" }, { status: 200 });
 }
 

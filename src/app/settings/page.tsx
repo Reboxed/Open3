@@ -2,9 +2,9 @@
 import { useEffect, useState } from "react";
 
 export default function BYOKSetupPage() {
-    const [openaiKey, setOpenaiKey] = useState("");
-    const [anthropicKey, setAnthropicKey] = useState("");
-    const [geminiKey, setGeminiKey] = useState("");
+    // const [openaiKey, setOpenaiKey] = useState("");
+    // const [anthropicKey, setAnthropicKey] = useState("");
+    // const [geminiKey, setGeminiKey] = useState("");
     const [openrouterKey, setOpenrouterKey] = useState("");
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -14,9 +14,9 @@ export default function BYOKSetupPage() {
             .then((res) => res.json())
             .then((data) => {
                 if (data.byok) {
-                    setOpenaiKey(data.byok.openaiKey || "");
-                    setAnthropicKey(data.byok.anthropicKey || "");
-                    setGeminiKey(data.byok.geminiKey || "");
+                    // setOpenaiKey(data.byok.openaiKey || "");
+                    // setAnthropicKey(data.byok.anthropicKey || "");
+                    // setGeminiKey(data.byok.geminiKey || "");
                     setOpenrouterKey(data.byok.openrouterKey || "");
                 }
             });
@@ -25,10 +25,11 @@ export default function BYOKSetupPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        // Save BYOK keys
         await fetch("/api/byok", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ openaiKey, anthropicKey, geminiKey, openrouterKey }),
+            body: JSON.stringify({ /* openaiKey, anthropicKey, geminiKey,  */openrouterKey }),
         });
         setLoading(false);
         setSuccess(true);
@@ -38,8 +39,8 @@ export default function BYOKSetupPage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen">
             <div className="flex flex-col">
-                <h1 className="text-2xl font-bold mb-4">Bring Your Own Key Setup</h1>
-                <span className="max-w-135"><strong>Inference is expensive!!</strong> I wanted to, at first, release this for free and then $6/mo or summin but i couldn&apos;t get all that done in the time of the hackathon (especially the registrations required for it), BUT I am dedicated to fully even refactor this project after and release it both Open-Source and hosted.</span>
+                <h1 className="text-2xl font-bold mb-4">Bring-Your-Own-Key</h1>
+                <span className="max-w-135"><strong>Inference is expensive.</strong> I wanted to, at first, release this for free and then $6/mo or summin but i couldn&apos;t get all that done in the time of the hackathon (especially the business stuff required for it), BUT I am dedicated to even fully refactor this project after and release it both Open-Source and hosted.</span>
                 <br/>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full max-w-135">
                     {/* <label className="w-full">

@@ -1,60 +1,60 @@
 {
-  "name": "open3",
-  "version": "1.0.0",
-  "description": "Open3 is a web application that provides a unified interface for interacting with multiple AI models, including OpenAI, Anthropic, and Google GenAI.",
-  "author": "Rebxd",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Reboxed/open3.git"
-  },
-  "keywords": [
-    "AI",
-    "Chat",
-    "Next.js"
-  ],
-  "homepage": "https://open3.rebxd.com",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.54.0",
-    "@clerk/nextjs": "^6.21.0",
-    "@clerk/themes": "^2.2.49",
-    "@google/genai": "^1.4.0",
-    "@types/html-escaper": "^3.0.4",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "date-fns": "^4.1.0",
-    "highlight.js": "^11.11.1",
-    "html-escaper": "^3.0.3",
-    "ioredis": "^5.6.1",
-    "next": "15.3.3",
-    "openai": "^5.5.0",
-    "parse-numeric-range": "^1.3.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
-    "rehype-raw": "^7.0.0",
-    "remark": "^15.0.1",
-    "remark-gfm": "^4.0.1",
-    "remark-html": "^16.0.1",
-    "swr": "^2.3.3"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/ioredis": "^5.0.0",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.3.3",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "name": "open3",
+    "version": "1.0.0",
+    "description": "Open3 is a web application that provides a unified interface for interacting with multiple AI models, including OpenAI, Anthropic, and Google GenAI.",
+    "author": "Rebxd",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Reboxed/open3.git"
+    },
+    "keywords": [
+        "AI",
+        "Chat",
+        "Next.js"
+    ],
+    "homepage": "https://open3.rebxd.com",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.54.0",
+        "@clerk/nextjs": "^6.21.0",
+        "@clerk/themes": "^2.2.49",
+        "@google/genai": "^1.4.0",
+        "@types/html-escaper": "^3.0.4",
+        "@types/react-syntax-highlighter": "^15.5.13",
+        "date-fns": "^4.1.0",
+        "highlight.js": "^11.11.1",
+        "html-escaper": "^3.0.3",
+        "ioredis": "^5.6.1",
+        "next": "15.3.3",
+        "openai": "^5.5.0",
+        "parse-numeric-range": "^1.3.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "react-markdown": "^10.1.0",
+        "rehype-highlight": "^7.0.2",
+        "rehype-raw": "^7.0.0",
+        "remark": "^15.0.1",
+        "remark-gfm": "^4.0.1",
+        "remark-html": "^16.0.1",
+        "swr": "^2.3.3"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3",
+        "@tailwindcss/postcss": "^4",
+        "@types/ioredis": "^5.0.0",
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "eslint": "^9",
+        "eslint-config-next": "15.3.3",
+        "tailwindcss": "^4",
+        "typescript": "^5"
+    }
 }

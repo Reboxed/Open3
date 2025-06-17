@@ -344,7 +344,7 @@ export default function Chat() {
                     </div>
                     <ChatInput
                         onSend={onSend}
-                        loading={generating}
+                        generating={generating}
                         className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
                         model={model}
                         provider={provider}

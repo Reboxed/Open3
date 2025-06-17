@@ -4,7 +4,7 @@ import React from "react";
 import useSWR from "swr";
 import { ApiError, ChatResponse, GetChatsResponse } from "../../internal-lib/types/api";
 import { FormEventHandler, useEffect, useRef, useState, useMemo } from "react";
-import { addTabs } from "../lib/utils/loadTabs";
+import { addAndSaveTabsLocally } from "../lib/utils/localStorageTabs";
 import { useRouter } from "next/navigation";
 import { format, isToday, isYesterday, isThisWeek, formatRelative } from "date-fns";
 
@@ -96,7 +96,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
 
     const router = useRouter();
     function createTab(chat: ChatResponse) {
-        addTabs(localStorage, {
+        addAndSaveTabsLocally(localStorage, {
             id: chat.id,
             label: chat.label ?? "New Tab",
             link: `/chat/${chat.id}`

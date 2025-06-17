@@ -3,7 +3,7 @@
 //
 // If you're seeign this code please let me tell you i was the only person working on this project actively
 // trying to carry it with as many features as possible. the moment this cloneathon is over i will rewrite
-// this entire thing. that is. if i win.
+// this entire thing. lmfao.
 //
 
 import React, { useState, useTransition, useEffect } from "react";
@@ -11,12 +11,12 @@ import ChatInput from "./components/ChatInput";
 import { useRouter } from "next/navigation";
 import "highlight.js/styles/github-dark.css"; // Change to preferred style
 import { ApiError, CreateChatRequest, CreateChatResponse } from "@/internal-lib/types/api";
-import { addTabs } from "./lib/utils/loadTabs";
+import { addAndSaveTabsLocally } from "./lib/utils/localStorageTabs";
 import { SignedIn, SignedOut, SignInButton, useClerk } from "@clerk/nextjs";
 import { useRecentChats } from "./hooks/useRecentChats";
 
 export default function Home() {
-    const [isLoading, setIsLoading] = useState(false);
+    const [generating, setGenerating] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [selectedModel, setSelectedModel] = useState<string>("");
     const [selectedProvider, setSelectedProvider] = useState<string>("");
@@ -33,7 +33,7 @@ export default function Home() {
     }, []);
 
     async function onSend(msg: string, attachments: { url: string; filename: string }[] = [], model?: string, provider?: string) {
-        setIsLoading(true);
+        setGenerating(true);
         const chat = await fetch("/api/chat", {
             method: "POST",
             body: JSON.stringify({
@@ -43,15 +43,15 @@ export default function Home() {
         }).then(res => res.json() as Promise<CreateChatResponse | ApiError>)
             .catch(() => undefined);
         if (!chat || "error" in chat) {
-            setIsLoading(false);
+            setGenerating(false);
             return;
         }
         sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, tabId: chat.id }));
-        addTabs(localStorage, {
+        addAndSaveTabsLocally(localStorage, {
             id: chat.id,
             link: `/chat/${chat.id}`
         });
-        setIsLoading(false);
+        setGenerating(false);
         startTransition(() => {
             router.push(`/chat/${chat.id}`);
         });
@@ -94,8 +94,8 @@ export default function Home() {
                     <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
                     <ChatInput
                         onSend={onSend}
-                        loading={isLoading || isPending}
-                        className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`}
+                        generating={generating || isPending}
+                        className={`w-full ${(generating || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`}
                         onModelChange={(model, provider) => {
                             setSelectedModel(model);
                             setSelectedProvider(provider);
@@ -115,7 +115,7 @@ export default function Home() {
                     >
                         {recentChats.map(chat => (
                             <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {
-                                addTabs(localStorage, {
+                                addAndSaveTabsLocally(localStorage, {
                                     id: chat.id,
                                     label: chat.label ?? "New Tab",
                                     link: `/chat/${chat.id}`
