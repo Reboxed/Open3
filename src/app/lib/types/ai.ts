@@ -1,7 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
 import { OpenAI } from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { getAllModelCapabilities } from "../utils/getAllModelCapabilities";
 
 export const AVAILABLE_PROVIDERS = ["google", "openai", "anthropic", "openrouter"];
 
@@ -21,11 +18,11 @@ export interface ModelCapabilities {
     model: string; // internal API name
     name: string;  // display name
     provider: string;
-    supportsAttachments: boolean;
-    supportsImages: boolean;
-    supportsStreaming: boolean;
+    developer: string;
+    supportsAttachmentsImages?: boolean;
+    supportsAttachmentsPDFs?: boolean;
+    supportsImageGen?: boolean;
     description?: string;
-    openRouterModel?: string; // optional, used for OpenRouter compatibility
 }
 
 export interface Chat {
@@ -33,11 +30,332 @@ export interface Chat {
     model: string;
     systemPrompt?: string;
     provider: string;
-    sendStream(message: Message): Promise<ReadableStream>;
-    send(message: Message): Promise<string>;
+    sendStream(message: Message, maxCompletionTokens?: number): Promise<ReadableStream>;
+    send(message: Message, maxCompletionTokens?: number): Promise<string>;
     getHistory(): Message[];
     getCapabilities(): Map<string, ModelCapabilities>;
     getCurrentModelCapabilities(): ModelCapabilities | undefined;
+}
+
+export class OpenRouterChat implements Chat {
+    model: string;
+    provider: string = "openrouter";
+    label?: string;
+    systemPrompt?: string;
+    private history: Message[] = [];
+    private openai: OpenAI;
+
+    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
+        this.model = model;
+        this.history = history;
+        this.systemPrompt = systemPrompt;
+        this.provider = "openrouter";
+        this.openai = new OpenAI({
+            apiKey: apiKey || process.env.OPENROUTER_API_KEY,
+            baseURL: "https://openrouter.ai/api/v1"
+        });
+        if (!apiKey && !process.env.OPENROUTER_API_KEY) {
+            throw new Error("OPENROUTER_API_KEY environment variable is required");
+        }
+    }
+
+    private mapRole(role?: "user" | "model"): "user" | "assistant" {
+        if (role === "model") return "assistant";
+        return "user";
+    }
+
+    private convertPartsToOpenAIContent(parts: { text?: string; inlineData?: { mimeType: string; data: string } }[], allowImages: boolean, allowPDFs: boolean) {
+        const content: any[] = [];
+        for (const part of parts) {
+            if (part.text) {
+                content.push({
+                    type: "text",
+                    text: part.text
+                });
+            } else if (part.inlineData) {
+                if (allowImages && part.inlineData.mimeType.startsWith('image/')) {
+                    content.push({
+                        type: "image_url",
+                        image_url: {
+                            url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+                        }
+                    });
+                } else if (allowPDFs && part.inlineData.mimeType === 'application/pdf') {
+                    content.push({
+                        type: "file",
+                        file: {
+                            mimeType: part.inlineData.mimeType,
+                            data: part.inlineData.data
+                        }
+                    });
+                }
+            }
+        }
+        return content.length > 0 ? content : [{ type: "text", text: "" }];
+    }
+
+    private filterParts(parts: { text?: string; inlineData?: { mimeType: string; data: string } }[], allowImages: boolean, allowPDFs: boolean) {
+        return parts.filter(part => {
+            if (part.text) return true;
+            if (part.inlineData) {
+                if (allowImages && part.inlineData.mimeType.startsWith('image/')) return true;
+                if (allowPDFs && part.inlineData.mimeType === 'application/pdf') return true;
+                return false;
+            }
+            return false;
+        });
+    }
+
+    async sendStream(message: Message, maxCompletionTokens?: number): Promise<ReadableStream> {
+        if (!message.parts[0] && (!message.attachments || message.attachments.length === 0)) {
+            throw "at least one part or attachment is required";
+        }
+        const caps = this.getCurrentModelCapabilities();
+        const allowImages = !!caps?.supportsAttachmentsImages;
+        const allowPDFs = !!caps?.supportsAttachmentsPDFs;
+        const filteredHistory = this.history.map((msg) => ({
+            ...msg,
+            parts: this.filterParts(msg.parts, allowImages, allowPDFs)
+        }));
+        const filteredMessage = {
+            ...message,
+            parts: this.filterParts(message.parts, allowImages, allowPDFs)
+        };
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+            ...filteredHistory.map((msg) => ({
+                role: this.mapRole(msg.role),
+                content: this.convertPartsToOpenAIContent(msg.parts, allowImages, allowPDFs)
+            })), {
+                role: this.mapRole(filteredMessage.role),
+                content: this.convertPartsToOpenAIContent(filteredMessage.parts, allowImages, allowPDFs)
+            }
+        ];
+        if (this.systemPrompt) {
+            messages.push({
+                role: "system",
+                content: this.systemPrompt
+            });
+        }
+        const stream = await this.openai.chat.completions.create({
+            model: this.model,
+            messages,
+            stream: true,
+            max_completion_tokens: maxCompletionTokens,
+        });
+        const readableStreamOpenAI = stream.toReadableStream();
+        if (!readableStreamOpenAI) {
+            throw new Error("Failed to create readable stream from OpenAI response");
+        }
+
+        const that = this;
+        const readable = new ReadableStream({
+            async start(controller) {
+                let fullResponse = "";
+                try {
+                    const reader = readableStreamOpenAI.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const jsonString = decoder.decode(value, { stream: true });
+                        const json = JSON.parse(jsonString);
+                        const text = json.choices?.[0]?.delta?.content || "";
+                        fullResponse += text;
+                        controller.enqueue(new TextEncoder().encode("data: " + text + "\n\n"));
+                    }
+                    that.history.push({
+                        role: "model",
+                        parts: [{ text: fullResponse }],
+                    });
+                    controller.close();
+                } catch (error) {
+                    controller.error(error);
+                }
+            }
+        });
+        return readable;
+    }
+
+    async send(message: Message, maxCompletionTokens?: number): Promise<string> {
+        const caps = this.getCurrentModelCapabilities();
+        const allowImages = !!caps?.supportsAttachmentsImages;
+        const allowPDFs = !!caps?.supportsAttachmentsPDFs;
+        const filteredHistory = this.history.map((msg) => ({
+            ...msg,
+            parts: this.filterParts(msg.parts, allowImages, allowPDFs)
+        }));
+        const filteredMessage = {
+            ...message,
+            parts: this.filterParts(message.parts, allowImages, allowPDFs)
+        };
+        const messages = [
+            ...filteredHistory.map((msg) => ({
+                role: this.mapRole(msg.role),
+                content: this.convertPartsToOpenAIContent(msg.parts, allowImages, allowPDFs)
+            })),
+            {
+                role: this.mapRole(filteredMessage.role),
+                content: this.convertPartsToOpenAIContent(filteredMessage.parts, allowImages, allowPDFs)
+            }
+        ];
+        const response = await this.openai.chat.completions.create({
+            model: this.model,
+            messages,
+            max_completion_tokens: maxCompletionTokens,
+        });
+        const text = response.choices?.[0]?.message?.content || "";
+        this.history.push({
+            role: "model",
+            parts: [{ text }],
+        });
+        return text;
+    }
+
+    getHistory(): Message[] {
+        return this.history.map((msg) => ({
+            role: msg.role,
+            parts: msg.parts,
+            attachments: msg.attachments,
+        } as Message));
+    }
+
+    static getCapabilities(): Map<string, ModelCapabilities> {
+        return new Map<string, ModelCapabilities>([
+            ["anthropic/claude-3.5-sonnet", {
+                model: "anthropic/claude-3.5-sonnet",
+                name: "Claude Sonnet 3.5",
+                provider: "openrouter",
+                developer: "Anthropic",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["anthropic/claude-opus-4", {
+                model: "anthropic/claude-opus-4",
+                name: "Claude Opus 4",
+                provider: "openrouter",
+                developer: "Anthropic",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["anthropic/claude-sonnet-4", {
+                model: "anthropic/claude-sonnet-4",
+                name: "Claude Sonnet 4",
+                provider: "openrouter",
+                developer: "Anthropic",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["openai/o4-mini", {
+                model: "openai/o4-mini",
+                name: "GPT-o4 mini",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/o4-mini-high", {
+                model: "openai/o4-mini-high",
+                name: "GPT-o4 mini (high)",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/o3-mini", {
+                model: "openai/o3-mini",
+                name: "GPT-o3 mini",
+                provider: "openrouter",
+                developer: "OpenAI",
+            }],
+            ["openai/o3-mini-high", {
+                model: "openai/o3-mini-high",
+                name: "GPT-o3 mini (high)",
+                provider: "openrouter",
+                developer: "OpenAI",
+            }],
+            ["openai/gpt-4.1", {
+                model: "openai/gpt-4.1",
+                name: "GPT-4.1",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/gpt-4.1-mini", {
+                model: "openai/gpt-4.1-mini",
+                name: "GPT-4.1 Mini",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/gpt-4.1-nano", {
+                model: "openai/gpt-4.1-nano",
+                name: "GPT-4.1 Nano",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/chatgpt-4o-latest", {
+                model: "openai/chatgpt-4o-latest",
+                name: "GPT-4o",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["openai/gpt-4o-mini", {
+                model: "openai/gpt-4o-mini",
+                name: "GPT-4o Mini",
+                provider: "openrouter",
+                developer: "OpenAI",
+                supportsAttachmentsImages: true,
+            }],
+            ["google/gemini-2.0-flash-001", {
+                model: "google/gemini-2.0-flash-001",
+                name: "Gemini 2.0 Flash",
+                provider: "openrouter",
+                developer: "Google",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["google/gemini-2.5-flash", {
+                model: "google/gemini-2.5-flash",
+                name: "Gemini 2.5 Flash",
+                provider: "openrouter",
+                developer: "Google",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["google/gemini-flash-1.5", {
+                model: "google/gemini-flash-1.5",
+                name: "Gemini 1.5 Flash",
+                provider: "openrouter",
+                developer: "Google",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["google/gemini-pro-1.5", {
+                model: "google/gemini-pro-1.5",
+                name: "Gemini 1.5 Pro",
+                provider: "openrouter",
+                developer: "Google",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+            ["google/gemini-2.5-pro", {
+                model: "google/gemini-2.5-pro",
+                name: "Gemini 2.5 Pro",
+                provider: "openrouter",
+                developer: "Google",
+                supportsAttachmentsImages: true,
+                supportsAttachmentsPDFs: true,
+            }],
+        ]);
+    }
+
+    getCapabilities(): Map<string, ModelCapabilities> {
+        return OpenRouterChat.getCapabilities();
+    }
+
+    getCurrentModelCapabilities(): ModelCapabilities | undefined {
+        return OpenRouterChat.getCapabilities().get(this.model);
+    }
 }
 
 // export class GeminiChat implements Chat {
@@ -535,254 +853,4 @@ export interface Chat {
 // If you're seeign this code please let me tell you i was the only person working on this project actively
 // trying to carry it with as many features as possible. the moment this cloneathon is over i will rewrite
 // this entire thing. that is. if i win.
-//
 
-export class OpenRouterChat implements Chat {
-    model: string;
-    provider: string = "openrouter";
-    label?: string;
-    systemPrompt?: string;
-    private history: Message[] = [];
-    private openai: OpenAI;
-
-    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
-        this.model = model;
-        this.history = history;
-        this.systemPrompt = systemPrompt;
-        this.provider = "openrouter";
-        this.openai = new OpenAI({
-            apiKey: apiKey || process.env.OPENROUTER_API_KEY,
-            baseURL: "https://openrouter.ai/api/v1"
-        });
-        if (!apiKey && !process.env.OPENROUTER_API_KEY) {
-            throw new Error("OPENROUTER_API_KEY environment variable is required");
-        }
-    }
-
-    private mapRole(role?: "user" | "model"): "user" | "assistant" {
-        if (role === "model") return "assistant";
-        return "user";
-    }
-
-    private convertPartsToOpenAIContent(parts: { text?: string; inlineData?: { mimeType: string; data: string } }[]) {
-        const content: any[] = [];
-        for (const part of parts) {
-            if (part.text) {
-                content.push({
-                    type: "text",
-                    text: part.text
-                });
-            } else if (part.inlineData) {
-                if (part.inlineData.mimeType.startsWith('image/')) {
-                    content.push({
-                        type: "image_url",
-                        image_url: {
-                            url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
-                        }
-                    });
-                }
-            }
-        }
-        return content.length > 0 ? content : [{ type: "text", text: "" }];
-    }
-
-    async sendStream(message: Message): Promise<ReadableStream> {
-        if (!message.parts[0] && (!message.attachments || message.attachments.length === 0)) {
-            throw "at least one part or attachment is required";
-        }
-        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-            ...this.history.map((msg) => ({
-                role: this.mapRole(msg.role),
-                content: this.convertPartsToOpenAIContent(msg.parts)
-            })), {
-                role: this.mapRole(message.role),
-                content: this.convertPartsToOpenAIContent(message.parts)
-            }
-        ];
-        if (this.systemPrompt) {
-            messages.push({
-                role: "system",
-                content: this.systemPrompt
-            });
-        }
-        const stream = await this.openai.chat.completions.create({
-            model: this.model,
-            messages,
-            stream: true
-        });
-        const readableStreamOpenAI = stream.toReadableStream();
-        if (!readableStreamOpenAI) {
-            throw new Error("Failed to create readable stream from OpenAI response");
-        }
-
-        const that = this;
-        const readable = new ReadableStream({
-            async start(controller) {
-                let fullResponse = "";
-                try {
-                    const reader = readableStreamOpenAI.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const jsonString = decoder.decode(value, { stream: true });
-                        const json = JSON.parse(jsonString);
-                        const text = json.choices?.[0]?.delta?.content || "";
-                        console.log("OpenRouter read value:", text);
-                        // console.log("OpenRouter read value:", text);
-                        fullResponse += text;
-                        controller.enqueue(new TextEncoder().encode("data: " + text + "\n\n"));
-                    }
-                    that.history.push({
-                        role: "model",
-                        parts: [{ text: fullResponse }],
-                    });
-                    controller.close();
-                } catch (error) {
-                    controller.error(error);
-                }
-            }
-        });
-        return readable;
-    }
-
-    async send(message: Message): Promise<string> {
-        const messages = [
-            ...this.history.map((msg) => ({
-                role: this.mapRole(msg.role),
-                content: this.convertPartsToOpenAIContent(msg.parts)
-            })),
-            {
-                role: this.mapRole(message.role),
-                content: this.convertPartsToOpenAIContent(message.parts)
-            }
-        ];
-        const response = await this.openai.chat.completions.create({
-            model: this.model,
-            messages
-        });
-        const text = response.choices?.[0]?.message?.content || "";
-        this.history.push({
-            role: "model",
-            parts: [{ text }],
-        });
-        return text;
-    }
-
-    getHistory(): Message[] {
-        return this.history.map((msg) => ({
-            role: msg.role,
-            parts: msg.parts,
-            attachments: msg.attachments,
-        } as Message));
-    }
-
-    static getCapabilities(): Map<string, ModelCapabilities> {
-        return new Map<string, ModelCapabilities>([
-            ["anthropic/claude-3.5-sonnet", {
-                model: "anthropic/claude-3.5-sonnet",
-                name: "Claude Sonnet 3.5",
-                provider: "openrouter",
-                supportsAttachments: false,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["anthropic/claude-3.5-haiku", {
-                model: "anthropic/claude-3.5-haiku",
-                name: "Claude Haiku 3.5",
-                provider: "openrouter",
-                supportsAttachments: false,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["anthropic/claude-opus-4", {
-                model: "anthropic/claude-opus-4",
-                name: "Claude Opus 4",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: true,
-                supportsStreaming: true,
-            }],
-            ["anthropic/claude-sonnet-4", {
-                model: "anthropic/claude-sonnet-4",
-                name: "Claude Sonnet 4",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: true,
-                supportsStreaming: true,
-            }],
-            ["openai/gpt-4.1-nano", {
-                model: "openai/gpt-4.1-nano",
-                name: "GPT-4.1 Nano",
-                provider: "openrouter",
-                supportsAttachments: false,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["openai/chatgpt-4o-latest", {
-                model: "openai/chatgpt-4o-latest",
-                name: "GPT-4o",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["openai/gpt-4o-mini", {
-                model: "openai/gpt-4o-mini",
-                name: "GPT-4o Mini",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["google/gemini-2.0-flash-001", {
-                model: "google/gemini-2.0-flash-001",
-                name: "Gemini 2.0 Flash",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["google/gemini-2.5-flash", {
-                model: "google/gemini-2.5-flash",
-                name: "Gemini 2.5 Flash",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["google/gemini-flash-1.5", {
-                model: "google/gemini-flash-1.5",
-                name: "Gemini 1.5 Flash",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["google/gemini-pro-1.5", {
-                model: "google/gemini-pro-1.5",
-                name: "Gemini 1.5 Pro",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }],
-            ["google/gemini-2.5-pro", {
-                model: "google/gemini-2.5-pro",
-                name: "Gemini 2.5 Pro",
-                provider: "openrouter",
-                supportsAttachments: true,
-                supportsImages: false,
-                supportsStreaming: true,
-            }]
-        ]);
-    }
-
-    getCapabilities(): Map<string, ModelCapabilities> {
-        return OpenRouterChat.getCapabilities();
-    }
-
-    getCurrentModelCapabilities(): ModelCapabilities | undefined {
-        return OpenRouterChat.getCapabilities().get(this.model);
-    }
-}

@@ -7,10 +7,10 @@ export async function GET(req: NextRequest) {
     const provider = searchParams.get("provider");
     let all = getAllModelCapabilities();
     if (model) {
-        all = all.filter((m: any) => m.model === model || m.name === model);
+        const m = all.get(model)
+        all = m ? new Map([[model, m]]) : new Map(all.entries().filter(m => m[1].name === model));
+    } else if (provider) {
+        all = new Map(all.entries().filter(m => m[1].provider === provider));
     }
-    if (provider) {
-        all = all.filter((m: any) => m.provider === provider);
-    }
-    return NextResponse.json(all);
+    return NextResponse.json(all.entries().toArray());
 }

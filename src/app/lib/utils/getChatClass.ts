@@ -1,5 +1,5 @@
-import { GeminiChat, OpenAIChat, Chat, OpenRouterChat } from "@/app/lib/types/ai";
-import { AnthropicChat } from "../types/ai";
+import { /* GeminiChat, OpenAIChat, */ Chat, OpenRouterChat } from "@/app/lib/types/ai";
+// import { AnthropicChat } from "../types/ai";
 
 const SYSTEM_PROMPT = (model: string, provider: string, date: string) => `
 You are a helpful AI assistant called "Open3" powered by ${model} and developed by ${provider}.
@@ -22,12 +22,12 @@ If you are unsure about something, ask the user for clarification.
 export function getChatClass(provider: string, model: string, history: any[], systemPrompt?: string, apiKey?: string): Chat {
     const prompt = systemPrompt || SYSTEM_PROMPT(model, provider, new Date().toISOString());
     switch (provider?.toLowerCase()) {
-        case "openai":
-            return new OpenAIChat(history, model, prompt, apiKey);
-        case "google":
-            return new GeminiChat(history, model, prompt, apiKey);
-        case "anthropic":
-            return new AnthropicChat(history, model, prompt, apiKey);
+        // case "openai":
+        //     return new OpenAIChat(history, model, prompt, apiKey);
+        // case "google":
+        //     return new GeminiChat(history, model, prompt, apiKey);
+        // case "anthropic":
+        //     return new AnthropicChat(history, model, prompt, apiKey);
         case "openrouter":
             return new OpenRouterChat(history, model, prompt, apiKey);
         default:

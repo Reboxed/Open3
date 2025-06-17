@@ -8,6 +8,7 @@ import { NEW_TITLE_EVENT } from "@/app/lib/constants";
 import { TITLE_PROMPT } from "@/constants";
 import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
 import { OpenRouterChat } from "@/app/lib/types/ai";
+import { getChatClass } from "@/app/lib/utils/getChatClass";
 
 
 export async function GET(_: NextRequest) {
@@ -30,7 +31,7 @@ export async function GET(_: NextRequest) {
             controller = streamController;
             
             // Create event listener function
-            eventListener = async (chatId: string, messages: string[]) => {
+            const eventListener = async (chatId: string, messages: string[]) => {
                 if (isClosed || !controller) return;
                 if (generatingChats.has(chatId)) return; // Prevent duplicate processing
                 
@@ -68,21 +69,26 @@ export async function GET(_: NextRequest) {
                         if (requireByok && !apiKey) {
                             throw new Error("API key required for Gemini (Google)");
                         }
-                        const ai = new GoogleGenAI({ apiKey });
-                        const result = await ai.models.generateContentStream({
-                            model: OpenRouterChat.getCapabilities().find(m => m.model === ""),
-                            config: {
-                                systemInstruction: TITLE_PROMPT,
-                            },
-                            contents: messages.map(msg => ({ role: "user", text: msg } as PartUnion)),
-                        });
 
-                        for await (const chunk of result) {
+                        let chat;
+                        try {
+                            chat = getChatClass("openrouter", "google/gemini-1.5-flash", messages.slice(0, -2), TITLE_PROMPT, apiKey);
+                        } catch (e) {
+                            return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+                        }
+                        const readableStream = await chat.sendStream({
+                            parts: [{ text: messages[messages.length - 1 ]}],
+                            role: "user",
+                        }, 25);
+
+                        const reader = readableStream.getReader();
+                        while (true) {
                             if (isClosed || !controller) break;
-                            
-                            const text = chunk.text;
-                            if (text) {
-                                fullResponse += text;
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const text = new TextDecoder().decode(value);
+                            if (text.startsWith('data: ')) {
+                                fullResponse += text.slice(6);
                                 try {
                                     controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${fullResponse}\n\n`));
                                 } catch (enqueueError) {
@@ -91,6 +97,7 @@ export async function GET(_: NextRequest) {
                                 }
                             }
                         }
+                        reader.releaseLock();
 
                         // Save the final title to Redis
                         const finalTitle = fullResponse.trim() || "Untitled Chat";

@@ -1,11 +1,13 @@
 "use client";
 
+import React from "react";
 import useSWR from "swr";
 import { GetChat, GetChatsResponse } from "../api/chat/route";
 import { ApiError } from "../lib/types/api";
-import { FormEventHandler, useEffect, useRef, useState } from "react";
+import { FormEventHandler, useEffect, useRef, useState, useMemo } from "react";
 import { addTabs } from "../lib/utils/loadTabs";
 import { useRouter } from "next/navigation";
+import { format, isToday, isYesterday, isThisWeek, formatRelative } from "date-fns";
 
 interface ChatPaletteProps {
     className?: string;
@@ -416,6 +418,56 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         )
         : localChats.chats;
 
+    // Helper to group chats by date section
+    function getSectionLabel(date: Date) {
+        if (isToday(date)) return "Today";
+        if (isYesterday(date)) return "Yesterday";
+        if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, "EEEE"); // Weekday name
+        return formatRelative(date, "MM/dd/yyyy"); // Fallback to date
+    }
+
+    // Group chats into sections (memoized)
+    const chatsWithSections = useMemo(() => {
+        const sections: Array<{ section: string; chats: typeof filteredChats }> = [];
+        filteredChats.forEach(chat => {
+            const createdAt = chat.createdAt ? new Date(chat.createdAt) : new Date();
+            const section = getSectionLabel(createdAt);
+            if (!sections.length || sections[sections.length - 1].section !== section) {
+                sections.push({ section, chats: [chat] });
+            } else {
+                sections[sections.length - 1].chats.push(chat);
+            }
+        });
+        return sections;
+    }, [filteredChats]);
+
+    // For adaptive selected div
+    const chatItemRefs = useRef<(HTMLLIElement | null)[]>([]);
+    useEffect(() => {
+        if (!listRef.current || !selectedRef.current) return;
+        // Find the flat index of the selected chat in the rendered list
+        let flatIdx = 0;
+        let found = false;
+        for (let i = 0; i < chatsWithSections.length; ++i) {
+            for (let j = 0; j < chatsWithSections[i].chats.length; ++j) {
+                if (flatIdx === selected[0]) {
+                    found = true;
+                    break;
+                }
+                flatIdx++;
+            }
+            if (found) break;
+        }
+        const el = chatItemRefs.current[selected[0]];
+        if (el && selectedRef.current) {
+            const rect = el.getBoundingClientRect();
+            const listRect = listRef.current.getBoundingClientRect();
+            const top = el.offsetTop;
+            selectedRef.current.style.setProperty("--top-pos", `${top}px`);
+            selectedRef.current.style.height = `${rect.height}px`;
+        }
+    }, [selected, chatsWithSections, filteredChats.length, hidden]);
+
     return (
         <>
             <style>{`
@@ -539,233 +591,11 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         {!bulkDeleteMode && !isTouchDevice && (
                             <div
                                 ref={selectedRef}
-                                className="h-[64px] bg-white/5 w-full absolute rounded-2xl text-transparent select-none pointer-events-none shadow-highlight-sm transition-all duration-200"
-                                style={{ top: `var(--top-pos, 0px)` }}
+                                className="bg-white/5 w-full absolute rounded-2xl text-transparent select-none pointer-events-none shadow-highlight-sm transition-all duration-200"
+                                style={{ top: `var(--top-pos, 0px)`, height: 64 }}
                             />
-                        )} 
-                        {filteredChats.map((chat, idx) => {
-                            const isSelected = selectedChatIds.has(chat.id);
-                            const isDeleting = deletingId === chat.id;
-                            const isLongPressing = longPressActive === chat.id;
-
-                            return (
-                                <li key={chat.id}
-                                    className={`
-                                    p-4 h-[64px] flex gap-4 items-center text-neutral-50/80 w-full cursor-pointer 
-                                    ${isSelected ? "bg-blue-500/20 border border-blue-500/50" : idx !== selected[0] ? "hover:bg-white/[0.03]" : ""} 
-                                    rounded-2xl transition-all duration-200 overflow-clip
-                                    hover:[&>#delete]:!opacity-100 hover:[&>#delete]:!translate-0 
-                                    ${isDeleting ? "chat-delete-anim" : ""}
-                                    ${isLongPressing ? "chat-long-press" : ""}
-                                `}
-                                    onTouchStart={e => {
-                                        if (!isTouchDevice) return;
-                                        
-                                        const target = e.target as HTMLElement;
-                                        if (
-                                            target.id === "delete" ||
-                                            target.parentElement?.id === "delete" ||
-                                            target.parentElement?.parentElement?.id === "delete"
-                                        ) return;
-
-                                        touchStartRef.current = {
-                                            chatId: chat.id,
-                                            startTime: Date.now()
-                                        };
-
-                                        // Start long press timer (500ms)
-                                        touchTimeoutRef.current = setTimeout(() => {
-                                            if (touchStartRef.current?.chatId === chat.id) {
-                                                // Add long press animation
-                                                setLongPressActive(chat.id);
-                                                
-                                                // Trigger haptic feedback if available
-                                                if ('vibrate' in navigator) {
-                                                    navigator.vibrate(50);
-                                                }
-                                                
-                                                // Enter bulk mode and select this chat
-                                                setBulkDeleteMode(true);
-                                                setSelectedChatIds(prev => {
-                                                    const newSet = new Set(prev);
-                                                    newSet.add(chat.id);
-                                                    return newSet;
-                                                });
-                                                
-                                                // Remove animation after it completes
-                                                setTimeout(() => setLongPressActive(null), 500);
-                                                
-                                                touchStartRef.current = null;
-                                            }
-                                        }, 500);
-                                    }}
-                                    onTouchEnd={e => {
-                                        if (!isTouchDevice) return;
-                                        
-                                        if (touchTimeoutRef.current) {
-                                            clearTimeout(touchTimeoutRef.current);
-                                            touchTimeoutRef.current = null;
-                                        }
-                                        
-                                        setLongPressActive(null);
-                                        
-                                        // If we're in bulk mode, handle tap as selection toggle
-                                        if (bulkDeleteMode && touchStartRef.current) {
-                                            const touchDuration = Date.now() - touchStartRef.current.startTime;
-                                            if (touchDuration < 500) {
-                                                setSelectedChatIds(prev => {
-                                                    const newSet = new Set(prev);
-                                                    if (newSet.has(chat.id)) {
-                                                        newSet.delete(chat.id);
-                                                    } else {
-                                                        newSet.add(chat.id);
-                                                    }
-                                                    return newSet;
-                                                });
-                                            }
-                                        }
-                                        // If touch was released quickly and we're not in bulk mode, it's a tap
-                                        else if (touchStartRef.current && !bulkDeleteMode) {
-                                            const touchDuration = Date.now() - touchStartRef.current.startTime;
-                                            if (touchDuration < 500) {
-                                                createTab(chat);
-                                            }
-                                        }
-                                        
-                                        touchStartRef.current = null;
-                                    }}
-                                    onTouchMove={e => {
-                                        // Cancel long press if user moves finger
-                                        if (touchTimeoutRef.current) {
-                                            clearTimeout(touchTimeoutRef.current);
-                                            touchTimeoutRef.current = null;
-                                        }
-                                        setLongPressActive(null);
-                                        touchStartRef.current = null;
-                                    }}
-                                    onClick={e => {
-                                        // Skip click handling on touch devices to avoid conflicts
-                                        if (isTouchDevice) return;
-                                        
-                                        const clickTarget = e.target as HTMLElement;
-                                        if (
-                                            clickTarget.id === "delete" ||
-                                            clickTarget.parentElement?.id === "delete" ||
-                                            clickTarget.parentElement?.parentElement?.id === "delete"
-                                        ) return;
-
-                                        if (e.shiftKey) {
-                                            e.preventDefault();
-                                            // Toggle bulk selection mode
-                                            setBulkDeleteMode(true);
-                                            setSelectedChatIds(prev => {
-                                                const newSet = new Set(prev);
-                                                if (newSet.has(chat.id)) {
-                                                    newSet.delete(chat.id);
-                                                } else {
-                                                    newSet.add(chat.id);
-                                                }
-                                                return newSet;
-                                            });
-                                        } else if (bulkDeleteMode) {
-                                            // In bulk mode, regular click toggles selection
-                                            setSelectedChatIds(prev => {
-                                                const newSet = new Set(prev);
-                                                if (newSet.has(chat.id)) {
-                                                    newSet.delete(chat.id);
-                                                } else {
-                                                    newSet.add(chat.id);
-                                                }
-                                                return newSet;
-                                            });
-                                        } else {
-                                            createTab(chat);
-                                        }
-                                    }}
-                                >
-                                    {bulkDeleteMode && (
-                                        <div className="z-10 w-8 h-8 rounded-xl flex justify-center items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => { }}
-                                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                                            />
-                                        </div>
-                                    )}
-                                    <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center">
-                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M4.16406 10.0234C4.16406 11.9098 5.69369 13.4394 7.58008 13.4395H11.8271L10.8408 12.2803L12.1416 11.1729L14.749 14.2383L12.1416 17.3037L10.8408 16.1973L11.7334 15.1475H7.58008C4.75049 15.1474 2.45703 12.853 2.45703 10.0234V2.75H4.16406V10.0234Z" fill="white" />
-                                            <mask id="mask0_3179_681" style={{ maskType: "alpha" }} maskUnits="userSpaceOnUse" x="1" y="1" width="17" height="18">
-                                                <path d="M1.13281 11.7737C1.90193 14.6132 4.49496 16.7033 7.57812 16.7034H9.0332L9.83105 17.3821L11.1318 18.4885L11.5566 18.8499H1.13281V11.7737ZM17.2637 18.8499H12.8662L13.3242 18.3118L15.9316 15.2463L16.7891 14.2385L15.9316 13.2307L13.3242 10.1653L12.3164 8.97974L11.1309 9.98853L9.83008 11.0959L8.9043 11.884H7.57812C6.55094 11.884 5.71796 11.0508 5.71777 10.0237V1.41528H17.2637V18.8499Z" fill="white" />
-                                            </mask>
-                                            <g mask="url(#mask0_3179_681)">
-                                                <path d="M11.5449 13.4551H5.96484V11.748H11.5449V13.4551Z" fill="white" />
-                                                <path d="M12.9707 10.4727H5.96484V8.76562H12.9707V10.4727Z" fill="white" />
-                                                <path d="M11.5449 7.49512H5.96484V5.78809H11.5449V7.49512Z" fill="white" />
-                                                <path d="M14.7471 4.51855H5.96484V2.81055H14.7471V4.51855Z" fill="white" />
-                                            </g>
-                                        </svg>
-                                    </div>
-                                    {chat.label ?? "New Chat"}
-                                    {!bulkDeleteMode && (
-                                        <div
-                                            id="delete"
-                                            onClick={e => {
-                                                e.stopPropagation();
-                                                if (deletingId) return;
-                                                if (pendingDeleteId === chat.id) {
-                                                    if (pendingDeleteTimeout.current) {
-                                                        clearTimeout(pendingDeleteTimeout.current);
-                                                        pendingDeleteTimeout.current = null;
-                                                    }
-                                                    handleDelete(chat.id);
-                                                } else {
-                                                    setPendingDeleteId(chat.id);
-                                                    if (pendingDeleteTimeout.current) {
-                                                        clearTimeout(pendingDeleteTimeout.current);
-                                                    }
-                                                    pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
-                                                }
-                                            }}
-                                            style={{
-                                                opacity: idx === selected[0] ? 1 : -1,
-                                                translate: idx === selected[0] ? "0 0" : "50px 0",
-                                                background: pendingDeleteId === chat.id ? '#ef4444' : undefined,
-                                                color: pendingDeleteId === chat.id ? '#fff' : undefined,
-                                                border: pendingDeleteId === chat.id ? '1px solid #ef4444' : undefined,
-                                                width: 32, height: 32, position: 'relative',
-                                            }}
-                                            className={`
-                                                bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
-                                                hover:opacity-100 hover:translate-0 hover:bg-white/20
-                                                ${pendingDeleteId === chat.id ? '!bg-red-500 !text-white' : ''}
-                                            `}
-                                        >
-                                            <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(0)' : 'scale(1)', zIndex: pendingDeleteId === chat.id ? 0 : 1 }}>
-                                                {/* Trash SVG */}
-                                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
-                                                    <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
-                                                    <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
-                                            </svg>
-                                            </span>
-                                            <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(1)' : 'scale(0)', zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
-                                                {/* Checkmark SVG */}
-                                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                    <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
-                                                </svg>
-                                            </span>
-                                        </div>
-                                    )}
-                                </li>
-                            );
-                        })}
-                        {loadingMore && (
-                            <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
-                                <span>Loading more...</span>
-                            </li>
                         )}
-                        {!filteredChats.length && !isLoading && !loadingMore && (
+                        {chatsWithSections.length === 0 && !isLoading && !loadingMore && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
                                 <span>No chats found.</span>
                             </li>
@@ -773,6 +603,242 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         {isLoading && !loadingMore && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
                                 <span>Loading... please wait</span>
+                            </li>
+                        )}
+                        {chatsWithSections.map((section, sectionIdx) => (
+                            <React.Fragment key={section.section}>
+                                <li className="px-4 py-2 text-xs text-neutral-400 font-semibold select-none">
+                                    {section.section}
+                                </li>
+                                {section.chats.map((chat, idxInSection) => {
+                                    // Flat index in filteredChats
+                                    const flatIdx = filteredChats.findIndex(c => c.id === chat.id);
+                                    const isSelected = selectedChatIds.has(chat.id);
+                                    const isDeleting = deletingId === chat.id;
+                                    const isLongPressing = longPressActive === chat.id;
+                                    const createdAt = chat.createdAt ? new Date(chat.createdAt) : new Date();
+                                    const timeLabel = format(createdAt, "mm:HH");
+                                    return (
+                                        <li
+                                            key={chat.id}
+                                            ref={el => { chatItemRefs.current[flatIdx] = el; }}
+                                            className={`
+                                                p-4 h-[64px] flex gap-4 items-center text-neutral-50/80 w-full cursor-pointer 
+                                                ${isSelected ? "bg-blue-500/20 border border-blue-500/50" : flatIdx !== selected[0] ? "hover:bg-white/[0.03]" : ""} 
+                                                rounded-2xl transition-all duration-200 overflow-clip
+                                                hover:[&>#delete]:!opacity-100 hover:[&>#delete]:!translate-0 
+                                                ${isDeleting ? "chat-delete-anim" : ""}
+                                                ${isLongPressing ? "chat-long-press" : ""}
+                                            `}
+                                            onTouchStart={e => {
+                                                if (!isTouchDevice) return;
+                                                
+                                                const target = e.target as HTMLElement;
+                                                if (
+                                                    target.id === "delete" ||
+                                                    target.parentElement?.id === "delete" ||
+                                                    target.parentElement?.parentElement?.id === "delete"
+                                                ) return;
+
+                                                touchStartRef.current = {
+                                                    chatId: chat.id,
+                                                    startTime: Date.now()
+                                                };
+
+                                                // Start long press timer (500ms)
+                                                touchTimeoutRef.current = setTimeout(() => {
+                                                    if (touchStartRef.current?.chatId === chat.id) {
+                                                        // Add long press animation
+                                                        setLongPressActive(chat.id);
+                                                        
+                                                        // Trigger haptic feedback if available
+                                                        if ('vibrate' in navigator) {
+                                                            navigator.vibrate(50);
+                                                        }
+                                                        
+                                                        // Enter bulk mode and select this chat
+                                                        setBulkDeleteMode(true);
+                                                        setSelectedChatIds(prev => {
+                                                            const newSet = new Set(prev);
+                                                            newSet.add(chat.id);
+                                                            return newSet;
+                                                        });
+                                                        
+                                                        // Remove animation after it completes
+                                                        setTimeout(() => setLongPressActive(null), 500);
+                                                        
+                                                        touchStartRef.current = null;
+                                                    }
+                                                }, 500);
+                                            }}
+                                            onTouchEnd={e => {
+                                                if (!isTouchDevice) return;
+                                                
+                                                if (touchTimeoutRef.current) {
+                                                    clearTimeout(touchTimeoutRef.current);
+                                                    touchTimeoutRef.current = null;
+                                                }
+                                                
+                                                setLongPressActive(null);
+                                                
+                                                // If we're in bulk mode, handle tap as selection toggle
+                                                if (bulkDeleteMode && touchStartRef.current) {
+                                                    const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                                    if (touchDuration < 500) {
+                                                        setSelectedChatIds(prev => {
+                                                            const newSet = new Set(prev);
+                                                            if (newSet.has(chat.id)) {
+                                                                newSet.delete(chat.id);
+                                                            } else {
+                                                                newSet.add(chat.id);
+                                                            }
+                                                            return newSet;
+                                                        });
+                                                    }
+                                                }
+                                                // If touch was released quickly and we're not in bulk mode, it's a tap
+                                                else if (touchStartRef.current && !bulkDeleteMode) {
+                                                    const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                                    if (touchDuration < 500) {
+                                                        createTab(chat);
+                                                    }
+                                                }
+                                                
+                                                touchStartRef.current = null;
+                                            }}
+                                            onTouchMove={e => {
+                                                // Cancel long press if user moves finger
+                                                if (touchTimeoutRef.current) {
+                                                    clearTimeout(touchTimeoutRef.current);
+                                                    touchTimeoutRef.current = null;
+                                                }
+                                                setLongPressActive(null);
+                                                touchStartRef.current = null;
+                                            }}
+                                            onClick={e => {
+                                                // Skip click handling on touch devices to avoid conflicts
+                                                if (isTouchDevice) return;
+                                                
+                                                const clickTarget = e.target as HTMLElement;
+                                                if (
+                                                    clickTarget.id === "delete" ||
+                                                    clickTarget.parentElement?.id === "delete" ||
+                                                    clickTarget.parentElement?.parentElement?.id === "delete"
+                                                ) return;
+
+                                                if (e.shiftKey) {
+                                                    e.preventDefault();
+                                                    // Toggle bulk selection mode
+                                                    setBulkDeleteMode(true);
+                                                    setSelectedChatIds(prev => {
+                                                        const newSet = new Set(prev);
+                                                        if (newSet.has(chat.id)) {
+                                                            newSet.delete(chat.id);
+                                                        } else {
+                                                            newSet.add(chat.id);
+                                                        }
+                                                        return newSet;
+                                                    });
+                                                } else if (bulkDeleteMode) {
+                                                    // In bulk mode, regular click toggles selection
+                                                    setSelectedChatIds(prev => {
+                                                        const newSet = new Set(prev);
+                                                        if (newSet.has(chat.id)) {
+                                                            newSet.delete(chat.id);
+                                                        } else {
+                                                            newSet.add(chat.id);
+                                                        }
+                                                        return newSet;
+                                                    });
+                                                } else {
+                                                    createTab(chat);
+                                                }
+                                            }}
+                                        >
+                                            {bulkDeleteMode && (
+                                                <div className="z-10 w-8 h-8 rounded-xl flex justify-center items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => { }}
+                                                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                            )}
+                                            <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center">
+                                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M4.16406 10.0234C4.16406 11.9098 5.69369 13.4394 7.58008 13.4395H11.8271L10.8408 12.2803L12.1416 11.1729L14.749 14.2383L12.1416 17.3037L10.8408 16.1973L11.7334 15.1475H7.58008C4.75049 15.1474 2.45703 12.853 2.45703 10.0234V2.75H4.16406V10.0234Z" fill="white" />
+                                                    <mask id="mask0_3179_681" style={{ maskType: "alpha" }} maskUnits="userSpaceOnUse" x="1" y="1" width="17" height="18">
+                                                        <path d="M1.13281 11.7737C1.90193 14.6132 4.49496 16.7033 7.57812 16.7034H9.0332L9.83105 17.3821L11.1318 18.4885L11.5566 18.8499H1.13281V11.7737ZM17.2637 18.8499H12.8662L13.3242 18.3118L15.9316 15.2463L16.7891 14.2385L15.9316 13.2307L13.3242 10.1653L12.3164 8.97974L11.1309 9.98853L9.83008 11.0959L8.9043 11.884H7.57812C6.55094 11.884 5.71796 11.0508 5.71777 10.0237V1.41528H17.2637V18.8499Z" fill="white" />
+                                                    </mask>
+                                                    <g mask="url(#mask0_3179_681)">
+                                                        <path d="M11.5449 13.4551H5.96484V11.748H11.5449V13.4551Z" fill="white" />
+                                                        <path d="M12.9707 10.4727H5.96484V8.76562H12.9707V10.4727Z" fill="white" />
+                                                        <path d="M11.5449 7.49512H5.96484V5.78809H11.5449V7.49512Z" fill="white" />
+                                                        <path d="M14.7471 4.51855H5.96484V2.81055H14.7471V4.51855Z" fill="white" />
+                                                    </g>
+                                                </svg>
+                                            </div>
+                                            <span className="flex-1 truncate">{chat.label ?? "New Chat"}</span>
+                                            <span className="ml-2 text-xs text-neutral-400 font-mono">{timeLabel}</span>
+                                            {/* ...existing delete button... */}
+                                            {!bulkDeleteMode && (
+                                                <div
+                                                    id="delete"
+                                                    style={{
+                                                        opacity: flatIdx === selected[0] ? 1 : -1,
+                                                        translate: flatIdx === selected[0] ? "0 0" : "50px 0",
+                                                        background: pendingDeleteId === chat.id ? '#ef4444' : undefined,
+                                                        color: pendingDeleteId === chat.id ? '#fff' : undefined,
+                                                        border: pendingDeleteId === chat.id ? '1px solid #ef4444' : undefined,
+                                                        width: 32, height: 32, position: 'relative',
+                                                    }}
+                                                    className={`
+                                                        bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
+                                                        hover:opacity-100 hover:translate-0 hover:bg-white/20
+                                                        ${pendingDeleteId === chat.id ? '!bg-red-500 !text-white' : ''}
+                                                    `}
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        if (deletingId) return;
+                                                        if (pendingDeleteId === chat.id) {
+                                                            if (pendingDeleteTimeout.current) {
+                                                                clearTimeout(pendingDeleteTimeout.current);
+                                                                pendingDeleteTimeout.current = null;
+                                                            }
+                                                            handleDelete(chat.id);
+                                                        } else {
+                                                            setPendingDeleteId(chat.id);
+                                                            if (pendingDeleteTimeout.current) {
+                                                                clearTimeout(pendingDeleteTimeout.current);
+                                                            }
+                                                            pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
+                                                        }
+                                                    }}
+                                                >
+                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(0)' : 'scale(1)', zIndex: pendingDeleteId === chat.id ? 0 : 1 }}>
+                                                        {/* Trash SVG */}
+                                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
+                                                            <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
+                                                            <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
+                                                        </svg>
+                                                    </span>
+                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(1)' : 'scale(0)', zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
+                                                        {/* Checkmark SVG */}
+                                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
+                                                        </svg>
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </React.Fragment>
+                        ))}
+                        {loadingMore && (
+                            <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
+                                <span>Loading more...</span>
                             </li>
                         )}
                     </ul>

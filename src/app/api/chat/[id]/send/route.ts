@@ -256,6 +256,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                         await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(aiMessage));
                     }
 
+                    reader.releaseLock();
                     controller.close();
                 } catch (error) {
                     console.error(error);

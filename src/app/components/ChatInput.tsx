@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useState, useRef, FormEventHandler } from "react";
-import { URLSearchParams } from "url";
 import Dropdown from "./Dropdown";
+import { ModelCapabilities } from "../lib/types/ai";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
 type ChatInputProps = {
@@ -31,17 +31,6 @@ function ErrorToast({ message, onClose }: { message: string, onClose: () => void
     );
 }
 
-// Type for model capabilities
-interface ModelCapabilities {
-    model: string;
-    name: string;
-    provider: string;
-    supportsAttachments: boolean;
-    supportsImages: boolean;
-    supportsStreaming: boolean;
-    description?: string;
-}
-
 export default function ChatInput({ onSend, className, loading, isModelFixed = false, model: initialModel, provider: initialProvider, onModelChange }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
@@ -54,7 +43,7 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [model, setModel] = useState(initialModel);
     const [provider, setProvider] = useState(initialProvider);
-    const [modelCapabilities, setModelCapabilities] = useState<ModelCapabilities[]>([]);
+    const [modelCapabilities, setModelCapabilities] = useState(new Map<string, ModelCapabilities>());
 
     useEffect(() => {
         const label = labelRef.current;
@@ -73,38 +62,41 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
             if (!model || !provider) return;
             fetch(`/api/models?model=${encodeURIComponent(model)}&provider=${encodeURIComponent(provider)}`)
                 .then(res => res.json())
-                .then((filtered: ModelCapabilities[]) => {
-                    setModelCapabilities(filtered);
+                .then((filtered: [string, ModelCapabilities][]) => {
+                    setModelCapabilities(new Map(filtered));
                 })
                 .catch(() => {
-                    setModelCapabilities([]);
+                    setModelCapabilities(new Map());
                 });
         } else {
             fetch("/api/models")
                 .then(res => res.json())
-                .then((allCaps: ModelCapabilities[]) => {
-                    setModelCapabilities(allCaps);
+                .then((allCaps: [string, ModelCapabilities][]) => {
+                    setModelCapabilities(new Map(allCaps));
                 })
                 .catch(() => {
-                    setModelCapabilities([]);
+                    setModelCapabilities(new Map());
                 });
         }
-    }, [isModelFixed, model, provider, initialModel, initialProvider]);
+    }, [isModelFixed, model, provider, initialModel, initialProvider, onModelChange]);
 
     // Set initial model and provider after fetching capabilities
     useEffect(() => {
-        if (modelCapabilities.length > 0 && !isModelFixed) {
-            const found = modelCapabilities.find(m => m.name === model || m.model === model);
+        if ((modelCapabilities?.size ?? 0) > 0 && !isModelFixed) {
+            const found = modelCapabilities?.get(model ?? "") || modelCapabilities?.values().find(m => m.name === model);
             if (!found) {
-                setModel(modelCapabilities[0].model);
-                setProvider(modelCapabilities[0].provider);
-                onModelChange?.(modelCapabilities[0].model, modelCapabilities[0].provider);
+                const model = modelCapabilities?.get("google/gemini-2.5-flash") || modelCapabilities?.values()?.toArray()?.[0];
+                if (!model) return;
+                setModel(model.model);
+                setProvider(model.provider);
+                onModelChange?.(model.model, model.provider);
             }
         }
     }, [modelCapabilities, model, onModelChange, isModelFixed]);
 
     // Find the selected model's capabilities
-    const selectedModel = modelCapabilities.find(m => m.name === model || m.model === model) || modelCapabilities[0];
+    console.log("Model capabilities:", model);
+    const selectedModel = modelCapabilities?.get(model ?? "") || modelCapabilities?.values().find(m => m.name === model) || modelCapabilities?.get("google/gemini-2.5-flash") || modelCapabilities?.values()?.toArray()?.[0];
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -145,7 +137,7 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
         e?.preventDefault();
         if (loading) return;
         if (!inputValue.trim() && attachments.length === 0) return;
-        if (!model || !provider) return;
+        if (!model || !provider) return;
 
         const newContentRaw = onSend?.(inputValue, attachments, model, provider);
         const newContent = newContentRaw instanceof Promise ? await newContentRaw : newContentRaw;
@@ -163,7 +155,7 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
     }
 
     // Hide attachment button if not supported by selected model
-    const showAttachmentButton = selectedModel?.supportsAttachments;
+    const showAttachmentButton = selectedModel?.supportsAttachmentsImages;
 
     return (
         <div className={`bg-[#222121] rounded-[36px] flex flex-col justify-stretch shadow-[inset_0_0_35px_#000,0_8px_20px_rgba(0,0,0,0.1)]/30 sticky bottom-6 max-md:bottom-4 ${className}`} style={{
@@ -178,7 +170,9 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
                         onPaste={(e) => {
                             e.preventDefault()
                             const text = e.clipboardData.getData("text/plain");
-                            document.execCommand("insertText", false, text);
+                            window.navigator.clipboard.writeText(text).catch(() => {
+                                setErrorToast("Failed to copy text");
+                            });
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
@@ -195,29 +189,48 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
                     <div className="flex justify-between items-stretch gap-5">
                         <div className="flex gap-3 items-stretch">
                             {/* Only render dropdown if modelCapabilities are loaded and model is not fixed */}
-                            {!isModelFixed && modelCapabilities.length > 0 && (
-                                <Dropdown
-                                    label=""
-                                    options={{
-                                        disableLabelsOnElements: true,
-                                    }}
-                                    className="mr-3"
-                                    items={modelCapabilities.map(m => ({
-                                        name: m.name/*  + (m.supportsAttachments ? " - Attachments" : "") */,
-                                        value: m.model,
-                                        disabled: false,
-                                        default: m.model === model,
-                                    }))}
-                                    name="model"
-                                    onChange={option => {
-                                        setModel(option.value);
-                                        const cap = modelCapabilities.find(m => m.name === option.name.split(" - ")[0] || m.model === option.value);
-                                        const prov = cap?.provider || "google";
-                                        setProvider(prov);
-                                        onModelChange?.(option.value, prov);
-                                    }}
-                                />
-                            )}
+                            {(() => {
+                                return !isModelFixed && (modelCapabilities?.size ?? 0) > 0 && (
+                                    <Dropdown
+                                        label=""
+                                        options={{
+                                            disableLabelsOnElements: true,
+                                        }}
+                                        className="mr-3"
+                                        items={modelCapabilities?.values().toArray().map(m => {
+                                            const supportedFeatures: string[] = [];
+                                            if (m?.supportsAttachmentsImages) {
+                                                supportedFeatures.push("./vision.svg");
+                                            }
+                                            if (m?.supportsAttachmentsPDFs) {
+                                                supportedFeatures.push("./pdfs.svg");
+                                            }
+
+                                            return {
+                                                name: m.name,
+                                                value: m.model,
+                                                disabled: false,
+                                                activeName: m.name,
+                                                default: m.model === model,
+                                                description: m.description || "",
+                                                developer: m.developer,
+                                                provider: m.provider,
+                                                icon: m.developer.toLowerCase() == "openai" ? "/openai.svg" :
+                                                    m.developer.toLowerCase() == "anthropic" ? "/anthropic.svg" : "/gemini.svg",
+                                                featureIcons: supportedFeatures,
+                                            }
+                                        })}
+                                        name="model"
+                                        onChange={option => {
+                                            setModel(option.value);
+                                            const cap = modelCapabilities?.get(option.value);
+                                            const prov = cap?.provider || "openrouter";
+                                            setProvider(prov);
+                                            onModelChange?.(option.value, prov);
+                                        }}
+                                    />
+                                )
+                            })()}
                             {showAttachmentButton && (
                                 <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
                                     className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}
