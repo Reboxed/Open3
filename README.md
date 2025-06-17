@@ -26,14 +26,14 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 ## Getting Started
 
 ### Prerequisites
-- [Bun](https://bun.sh/) (or Node.js)
-- [Docker](https://www.docker.com/) (for Redis)
+- [Node.js](https://nodejs.org/en) for development
+- [Docker](https://www.docker.com/)
 
 ### Installation
 
 1. **Clone the repository:**
    ```sh
-   git clone https://github.com/yourusername/open3.git
+   git clone https://github.com/Reboxed/open3.git
    cd open3
    ```
 2. **Install dependencies:**
