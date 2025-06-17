@@ -75,14 +75,14 @@ export class OpenRouterChat implements Chat {
                     text: part.text
                 });
             } else if (part.inlineData) {
-                if (allowImages && part.inlineData.mimeType.startsWith('image/')) {
+                if (allowImages && part.inlineData.mimeType.startsWith("image/")) {
                     content.push({
                         type: "image_url",
                         image_url: {
                             url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
                         }
                     });
-                } else if (allowPDFs && part.inlineData.mimeType === 'application/pdf') {
+                } else if (allowPDFs && part.inlineData.mimeType === "application/pdf") {
                     content.push({
                         type: "file",
                         file: {
@@ -100,8 +100,8 @@ export class OpenRouterChat implements Chat {
         return parts.filter(part => {
             if (part.text) return true;
             if (part.inlineData) {
-                if (allowImages && part.inlineData.mimeType.startsWith('image/')) return true;
-                if (allowPDFs && part.inlineData.mimeType === 'application/pdf') return true;
+                if (allowImages && part.inlineData.mimeType.startsWith("image/")) return true;
+                if (allowPDFs && part.inlineData.mimeType === "application/pdf") return true;
                 return false;
             }
             return false;
@@ -484,7 +484,7 @@ export class OpenRouterChat implements Chat {
 //         return GeminiChat.getCapabilities();
 //     }
 
-//     // Add a method to get the capabilities for the current chat's model
+//     // Add a method to get the capabilities for the current chat"s model
 //     getCurrentModelCapabilities(): ModelCapabilities | undefined {
 //         return GeminiChat.getCapabilities().find(c => c.model === this.model);
 //     }
@@ -526,7 +526,7 @@ export class OpenRouterChat implements Chat {
 //                 });
 //             } else if (part.inlineData) {
 //                 // OpenAI supports images through vision API
-//                 if (part.inlineData.mimeType.startsWith('image/')) {
+//                 if (part.inlineData.mimeType.startsWith("image/")) {
 //                     content.push({
 //                         type: "image_url",
 //                         image_url: {
@@ -701,7 +701,7 @@ export class OpenRouterChat implements Chat {
 //                 });
 //             } else if (part.inlineData) {
 //                 // Anthropic supports images
-//                 if (part.inlineData.mimeType.startsWith('image/')) {
+//                 if (part.inlineData.mimeType.startsWith("image/")) {
 //                     content.push({
 //                         type: "image",
 //                         source: {

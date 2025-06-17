@@ -2,57 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "@/app/lib/types/ai";
 import { Chat } from "@/app/lib/types/ai";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
-import "@/app/lib/redis";
-import { createChat } from "@/app/lib/utils/createChat";
-import { byokAvailable } from "@/app/lib/utils/byok";
-
-export interface CreateChatRequest {
-    model: string;
-    provider: string;
-}
-
-export interface CreateChatResponse {
-    id: string;
-    label?: string;
-    model: string;
-    provider: string; // Specify the provider
-}
-
-export interface GetChat extends Chat {
-    id: string;
-    createdAt?: number;
-}
-
-export interface GetChatsResponse {
-    chats: GetChat[];
-    total: number;
-    page: number;
-    limit: number;
-    hasMore: boolean;
-}
+import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
+import "@/internal-lib/redis";
+import { byokAvailable } from "@/internal-lib/utils/byok";
+import { getChatClass } from "@/internal-lib/utils/getChatClass";
+import { CreateChatRequest, CreateChatResponse, ChatResponse, GetChatsResponse, ApiError } from "@/internal-lib/types/api";
 
 export async function GET(req: NextRequest) {
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failured"
-        }, { status: 500 })
+        } as ApiError, { status: 500 })
     }
 
     const user = await auth();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!user.userId) return NextResponse.json({ exists: [] }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (!user.userId) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
-    const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
-    const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
-
+    // Pagination parameters
+    const page = parseInt(req.nextUrl.searchParams.get("page") || "1");
+    const limit = parseInt(req.nextUrl.searchParams.get("limit") || "50");
     if (page < 1) {
-        return NextResponse.json({ error: 'Page must be greater than 0' }, { status: 400 });
+        return NextResponse.json({ error: "Page must be greater than 0" } as ApiError, { status: 400 });
     }
     if (limit < 1 || limit > 100) {
-        return NextResponse.json({ error: 'Limit must be between 1 and 100' }, { status: 400 });
+        return NextResponse.json({ error: "Limit must be between 1 and 100" } as ApiError, { status: 400 });
     }
-
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit - 1;
 
@@ -76,8 +51,9 @@ export async function GET(req: NextRequest) {
                     ...JSON.parse(chatStr),
                     id: chatIds[i],
                 } : null;
-            } catch {
-                // Optional: log/skip broken chat
+            } catch (e) {
+                // This is gonna screw me over some day..
+                console.error(`Failed to parse chat ${chatIds[i]}:`, e);
                 return null;
             }
         })
@@ -99,24 +75,53 @@ export async function POST(req: NextRequest) {
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failure"
-        }, { status: 500 });
+        } as ApiError, { status: 500 });
     }
 
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
     if (!byokAvailable(user)) {
-        return NextResponse.json({ error: 'BYOK is required for this action' }, { status: 403 });
+        return NextResponse.json({ error: "BYOK is required for this action" } as ApiError, { status: 403 });
     }
 
     const { provider, model } = await req.json() as CreateChatRequest;
     if (!model) {
-        return NextResponse.json({ error: 'Model is required' }, { status: 400 });
+        return NextResponse.json({ error: "Model is required" } as ApiError, { status: 400 });
     }
     if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
-        return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
+        return NextResponse.json({ error: "Provider is required and must be one of: " + AVAILABLE_PROVIDERS.join(", ") } as ApiError, { status: 400 });
     }
 
-    const result = await createChat(user.id, { model, provider });
-    return NextResponse.json(result as CreateChatResponse, { status: 201 });
+    const id = crypto.randomUUID();
+    // Use getChatClass to instantiate the correct chat class
+    const chat = getChatClass(provider, model, []);
+
+    try {
+        const result = await redis.multi()
+            .hset(USER_CHATS_KEY(user.id), id, JSON.stringify({
+                model: chat.model,
+                provider: chat.provider,
+                createdAt: Date.now(),
+            } as ChatResponse))
+            .zadd(USER_CHATS_INDEX_KEY(user.id), Date.now(), id)
+            .exec();
+    
+        // Check for failure
+        if (!result || result.some(([err]) => err)) {
+            await redis.hdel(USER_CHATS_KEY(user.id), id);
+            return NextResponse.json({ error: "Failed to create chat" } as ApiError, { status: 500 });
+        }
+    } catch (error) {
+        // Idk why this may happen but i guess it might??? didnt happen to me yet
+        await redis.hdel(USER_CHATS_KEY(user.id), id);
+        console.error("Error creating chat:", error);
+        return NextResponse.json({ error: "Failed to create chat" } as ApiError, { status: 500 });
+    }
+    
+    return NextResponse.json({
+        id,
+        model: chat.model,
+        provider: chat.provider
+    } as CreateChatResponse, { status: 201 });
 }

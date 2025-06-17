@@ -9,8 +9,8 @@ class ChatEventBus extends EventEmitter {
         this.setMaxListeners(100);
         
         // Add error handling
-        this.on('error', (error) => {
-            console.error('EventBus error:', error);
+        this.on("error", (error) => {
+            console.error("EventBus error:", error);
         });
     }
     
@@ -31,7 +31,7 @@ class ChatEventBus extends EventEmitter {
                 listener(...args);
             } catch (error) {
                 console.error(`Error in event listener for ${event}:`, error);
-                this.emit('error', error);
+                this.emit("error", error);
             }
         };
         

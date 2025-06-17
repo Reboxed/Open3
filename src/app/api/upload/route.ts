@@ -3,8 +3,9 @@ import { unlink, writeFile } from "fs/promises";
 import { join } from "path";
 import { mkdir } from "fs/promises";
 import { currentUser } from "@clerk/nextjs/server";
-import redis, { GET_LOOKUP_KEY, USER_FILES_KEY } from "@/app/lib/redis";
-import { byokAvailable } from "@/app/lib/utils/byok";
+import redis, { GET_LOOKUP_KEY, USER_FILES_KEY } from "@/internal-lib/redis";
+import { byokAvailable } from "@/internal-lib/utils/byok";
+import { ApiError } from "@/internal-lib/types/api";
 
 // Ensure uploads directory exists in public folder
 const uploadsDir = join(process.cwd(), "public", "uploads");
@@ -13,11 +14,11 @@ await mkdir(uploadsDir, { recursive: true });
 
 export async function POST(req: NextRequest) {
     const user = await currentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     if (!byokAvailable(user)) {
-        return NextResponse.json({ error: "BYOK keys are required" }, { status: 403 });
+        return NextResponse.json({ error: "BYOK keys are required" } as ApiError, { status: 403 });
     }
 
     let filepath: string | null = null;
@@ -26,23 +27,25 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData();
         const file = formData.get("file") as File;
         if (!file) {
-            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+            return NextResponse.json({ error: "No file provided" } as ApiError, { status: 400 });
         }
 
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
         if (buffer.length === 0) {
-            return NextResponse.json({ error: "File is empty" }, { status: 400 });
+            return NextResponse.json({ error: "File is empty" } as ApiError, { status: 400 });
         }
+        // TODO: Make file size limit configurable and maybe via Clerk paid plan to be increased(?)
         if (buffer.length > 10 * 1024 * 1024) { // 10 MB limit
-            return NextResponse.json({ error: "File is too large" }, { status: 400 });
+            return NextResponse.json({ error: "File is too large" } as ApiError, { status: 400 });
         }
         if (!file.name || !file.type) {
-            return NextResponse.json({ error: "File name or type is missing" }, { status: 400 });
+            return NextResponse.json({ error: "File name or type is missing" } as ApiError, { status: 400 });
         }
+        // Validate file type
         const allowedTypes = ["image/jpeg", "image/png", "image/gif", "application/json", "application/x-yaml", "application/pdf", "application/octet-stream"];
         if (!allowedTypes.includes(file.type) && !file.type.startsWith("text/")) {
-            return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+            return NextResponse.json({ error: "Unsupported file type" } as ApiError, { status: 400 });
         }
 
         let filename = file.name;
@@ -99,33 +102,33 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+        return NextResponse.json({ error: "Upload failed" } as ApiError, { status: 500 });
     }
 }
 
 export async function DELETE(req: NextRequest) {
     const user = await currentUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
-    const filename = req.nextUrl.searchParams.get('filename');
+    const filename = req.nextUrl.searchParams.get("filename");
     if (!filename) {
-        return NextResponse.json({ error: "Filename required" }, { status: 400 });
+        return NextResponse.json({ error: "Filename required" } as ApiError, { status: 400 });
     }
     // Find the nulled lookup key
     const lookupKey = GET_LOOKUP_KEY(user.id, null, filename);
     const randomName = await redis.get(lookupKey);
     if (!randomName) {
-        return NextResponse.json({ error: "File not found" }, { status: 404 });
+        return NextResponse.json({ error: "File not found" } as ApiError, { status: 404 });
     }
     const filePath = join(uploadsDir, randomName);
     try {
-        await unlink(filePath).catch(() => { });
-        await unlink(filePath + ".meta.json").catch(() => { });
+        await unlink(filePath);
+        await unlink(filePath + ".meta.json");
         await redis.del(lookupKey);
         await redis.hdel(USER_FILES_KEY(user.id), randomName);
         return NextResponse.json({ success: true });
     } catch (error) {
-        return NextResponse.json({ error: "Failed to delete file" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to delete file" } as ApiError, { status: 500 });
     }
 }

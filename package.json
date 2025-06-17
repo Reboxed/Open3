@@ -1,6 +1,19 @@
 {
-  "name": "t3cloneathon",
-  "version": "0.1.0",
+  "name": "open3",
+  "version": "1.0.0",
+  "description": "Open3 is a web application that provides a unified interface for interacting with multiple AI models, including OpenAI, Anthropic, and Google GenAI.",
+  "author": "Rebxd",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Reboxed/open3.git"
+  },
+  "keywords": [
+    "AI",
+    "Chat",
+    "Next.js"
+  ],
+  "homepage": "https://open3.rebxd.com",
   "private": true,
   "scripts": {
     "dev": "next dev",

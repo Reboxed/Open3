@@ -9,7 +9,7 @@ export async function loadMessagesFromServer(chatId: string): Promise<{
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`);
         if (!response.ok) {
-            // console.error('Failed to load messages:', response.statusText);
+            // console.error('Failed to load messages:", response.statusText);
             return { messages: [], generating: false };
         }
         const data = await response.json();
@@ -18,35 +18,19 @@ export async function loadMessagesFromServer(chatId: string): Promise<{
             generating: data.generating ?? false,
         };
     } catch (error) {
-        console.error('Error loading messages:', error);
+        console.error("Error loading messages:", error);
         return { messages: [], generating: false };
     }
 }
 
-/*export async function saveMessageToServer(chatId: string, message: Message): Promise<boolean> {
-    try {
-        const response = await fetch(`/api/chat/${chatId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
-        return response.ok;
-    } catch (error) {
-        console.error('Error saving message:', error);
-        return false;
-    }
-}*/
-
 export async function clearMessagesFromServer(chatId: string): Promise<boolean> {
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`, {
-            method: 'DELETE',
+            method: "DELETE",
         });
         return response.ok;
     } catch (error) {
-        console.error('Error clearing messages:', error);
+        console.error("Error clearing messages:", error);
         return false;
     }
 }

@@ -2,18 +2,19 @@
 
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
-import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY } from "@/app/lib/redis";
-import { GetChat } from "../../route";
-import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
+import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY } from "@/internal-lib/redis";
+import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/internal-lib/eventBus";
 import { join } from "path";
-import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
-import { getChatClass } from "@/app/lib/utils/getChatClass";
+import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
+import { getChatClass } from "@/internal-lib/utils/getChatClass";
+import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 
 // Helper to load file data for an attachment and return parts to inject
 async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: { userId: string, chatId: string, originalName: string, uploadsDir: string }) {
-    const { GET_LOOKUP_KEY, USER_FILES_KEY } = await import("@/app/lib/redis");
+    const { GET_LOOKUP_KEY, USER_FILES_KEY } = await import("@/internal-lib/redis");
     const { readFile } = await import("fs/promises");
     const { join } = await import("path");
+
     const nulledLookupKey = GET_LOOKUP_KEY(userId, null, originalName);
     let randomName = await redis.get(nulledLookupKey);
     let foundWithNull = false;
@@ -24,7 +25,7 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
     } else {
         foundWithNull = true;
     }
-    // If found with null, update lookup to chatId and delete null lookup
+    // If "found with null", update lookup to chatId and delete null lookup
     if (foundWithNull) {
         const chatLookupKey = GET_LOOKUP_KEY(userId, chatId, originalName);
         await redis.set(chatLookupKey, randomName);
@@ -42,11 +43,13 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
             }
         }
     }
+
     let fileMeta = null;
     const file = await redis.hget(USER_FILES_KEY(userId), randomName);
     if (file) {
         try { fileMeta = JSON.parse(file); } catch { }
     }
+
     try {
         const filePath = join(uploadsDir, randomName);
         const metaPath = filePath + ".meta.json";
@@ -56,7 +59,8 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
             const metaRaw = await readFile(metaPath, "utf8");
             meta = JSON.parse(metaRaw);
         } catch { }
-        const ext = originalName.split('.').pop()?.toLowerCase() || "";
+
+        const ext = originalName.split(".").pop()?.toLowerCase() || "";
         const isImage = ["png", "jpg", "jpeg", "gif", "bmp", "webp"].includes(ext);
         if (isImage) {
             return [{
@@ -72,7 +76,7 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
             try {
                 text = fileBuffer.toString("utf8");
                 if (/^[\x00-\x08\x0E-\x1F\x7F-\x9F]/.test(text)) {
-                    throw new Error('Binary content');
+                    throw new Error("Binary content");
                 }
             } catch {
                 text = null;
@@ -95,7 +99,8 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
                 }];
             }
         }
-    } catch {
+    } catch (e) {
+        console.error(`Failed to read file ${originalName}:`, e);
         return [{ text: `[Failed to process file: ${originalName}]` }];
     }
 }
@@ -104,32 +109,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failure"
-        }, { status: 500 });
+        } as ApiError, { status: 500 });
     }
 
     // Get user and API keys and check authorization
     const { requireByok, byok, user } = await getUserApiKeys();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     // Extract chat ID and prompt from request parameters
     const { id } = await params;
     const searchParams = req.nextUrl.searchParams;
-    const prompt = searchParams.get('prompt');
+    const prompt = searchParams.get("prompt");
     if (!prompt) {
-        return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
+        return NextResponse.json({ error: "Prompt is required" } as ApiError, { status: 400 });
     }
 
     // Get model information
-    const requestedModel = searchParams.get('model');
-    const requestedProvider = searchParams.get('provider');
+    const requestedModel = searchParams.get("model");
+    const requestedProvider = searchParams.get("provider");
 
     // Get attachments from query params
-    const attachmentsParam = searchParams.get('attachments');
+    const attachmentsParam = searchParams.get("attachments");
     const attachments = attachmentsParam ? JSON.parse(attachmentsParam) : [];
 
     const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
-    let chatJson: GetChat | null;
+    let chatJson: ChatResponse | null;
     try {
         chatJson = rawChat ? {
             ...JSON.parse(rawChat),
@@ -138,7 +143,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     } catch {
         chatJson = null;
     }
-    if (!chatJson) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
+    if (!chatJson) return NextResponse.json({ error: "Failed to get chat" } as ApiError, { status: 404 });
 
     const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
     const existingMessages: Message[] = messageStrings.map(msgStr => {
@@ -166,7 +171,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // BYOK enforcement
     const apiKey = getProviderApiKey(chatProvider, byok);
     if (requireByok && !apiKey) {
-        return NextResponse.json({ error: `API key required for ${chatProvider}` }, { status: 403 });
+        return NextResponse.json({ error: `API key required for ${chatProvider}` } as ApiError, { status: 403 });
     }
 
     let chat;
@@ -174,7 +179,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // Instantiate the chat class based on provider and model
         chat = getChatClass(chatProvider, chatModel, existingMessages, undefined, apiKey);
     } catch (e) {
-        return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+        return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
     }
 
     // Save user message to Redis (only file paths in attachments, no file data in parts)
@@ -220,7 +225,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
         if (!genResult) {
             // Shouldn't happen unless a user is naughty and bypasses the GUI.
-            return NextResponse.json({ error: "Failed to set generating state" }, { status: 500 })
+            return NextResponse.json({ error: "Failed to set generating state" } as ApiError, { status: 500 })
         }
 
         // Create a custom readable stream that also saves the AI response
@@ -241,7 +246,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
                         // Parse the chunk to extract the text
                         const chunkText = new TextDecoder().decode(value);
-                        if (chunkText.startsWith('data: ')) {
+                        if (chunkText.startsWith("data: ")) {
                             try {
                                 fullResponse += chunkText.slice(6).trim();
                             } catch (e) {
@@ -267,7 +272,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 } catch (error) {
                     console.error(error);
                     // Send SSE error event to client before closing
-                    const errorMsg = JSON.stringify({ error: 'stream-failure', message: (error as Error).message });
+                    const errorMsg = JSON.stringify({ error: "stream-failure", message: (error as Error).message });
                     controller.enqueue(new TextEncoder().encode(`event: error\ndata: ${errorMsg}\n\n`));
                     controller.error(error);
                 } finally {
@@ -288,7 +293,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
     } catch (error) {
         console.error("Error during chat generation:", error);
-        return NextResponse.json({ error: 'Failed to generate content', details: (error as Error).message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to generate content", details: (error as Error).message } as ApiError, { status: 500 });
     } finally {
         // Ensure generating state is cleared even if an error occurs
         await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {

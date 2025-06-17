@@ -1,6 +1,6 @@
-import { visit } from 'unist-util-visit';
-import type { Root, Properties } from 'hast';
-import type { Plugin } from 'unified';
+import { visit } from "unist-util-visit";
+import type { Root, Properties } from "hast";
+import type { Plugin } from "unified";
 
 interface Options {
     className?: string;
@@ -8,11 +8,11 @@ interface Options {
 }
 
 const rehypeClassAll: Plugin<[Options?], Root> = (options = {}) => {
-    const className = options.className || 'md'; // Default class name
+    const className = options.className || "md"; // Default class name
 
     return (tree: Root) => {
         visit(tree, (node) => {
-            if (node.type === 'element') {
+            if (node.type === "element") {
                 if (node.properties) {
                     const props = node.properties as Properties;
 
@@ -22,9 +22,9 @@ const rehypeClassAll: Plugin<[Options?], Root> = (options = {}) => {
                             if (!JSON.stringify(props.className).includes(className)) {
                                 node.properties.className.push(className);
                             }
-                        } else if (typeof props.className === 'string') {
-                            if (!props.className.split(' ').includes(className)) {
-                                node.properties.className += ' ' + className;
+                        } else if (typeof props.className === "string") {
+                            if (!props.className.split(" ").includes(className)) {
+                                node.properties.className += " " + className;
                             }
                         }
                     } else {

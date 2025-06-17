@@ -1,28 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import redis, { CHAT_MESSAGES_KEY, USER_CHATS_KEY, GET_LOOKUP_KEY } from "@/app/lib/redis";
+import redis, { CHAT_MESSAGES_KEY, USER_CHATS_KEY, GET_LOOKUP_KEY } from "@/internal-lib/redis";
 import { Message } from "@/app/lib/types/ai";
 import { join } from "path";
 import { unlink, stat } from "fs/promises";
+import { ApiError } from "@/internal-lib/types/api";
 
 const uploadsDir = join(process.cwd(), "public", "uploads");
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
-        return NextResponse.json({ error: "Redis connection failure" }, { status: 500 });
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
+    
     const user = await auth();
-    if (!user || !user.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user || !user.userId) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+
     const { id } = await params;
     const url = new URL(req.url);
     const fromIndex = parseInt(url.searchParams.get("fromIndex") || "-1", 10);
     if (isNaN(fromIndex) || fromIndex < 0) {
-        return NextResponse.json({ error: "Invalid fromIndex" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid fromIndex" } as ApiError, { status: 400 });
     }
     
     const chatExists = await redis.hexists(USER_CHATS_KEY(user.userId), id);
     if (!chatExists) {
-        return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+        return NextResponse.json({ error: "Chat not found" } as ApiError, { status: 404 });
     }
     
     let messageStrings: string[] = [];

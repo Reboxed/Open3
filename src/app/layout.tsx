@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
 import {
-    ClerkProvider,
-    Protect,
-} from '@clerk/nextjs'
+    ClerkProvider
+} from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
-import { redirect } from "next/navigation";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { headers } from "next/headers";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -22,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
     title: "Open3 Chat",
-    description: "The Rebxd take on the T3 Chat.",
+    description: "The Reboxed take on the T3 Chat.",
 };
 
 export default async function RootLayout({

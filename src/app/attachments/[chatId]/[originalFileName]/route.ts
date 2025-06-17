@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
 import { readFile, stat } from "fs/promises";
 import { auth } from "@clerk/nextjs/server";
-import redis, { GET_LOOKUP_KEY } from "@/app/lib/redis";
+import redis, { GET_LOOKUP_KEY } from "@/internal-lib/redis";
+import { ApiError } from "@/internal-lib/types/api";
 
 const uploadsDir = join(process.cwd(), "public", "uploads");
 
@@ -12,19 +13,19 @@ export async function GET(
 ) {
     const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
     }
 
     const { chatId, originalFileName } = await params;
     if (!chatId || !originalFileName) {
-        return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid parameters" } as ApiError, { status: 400 });
     }
 
     // O(1) lookup for the file key
     const lookupKey = GET_LOOKUP_KEY(userId, chatId == "global" ? null : chatId, originalFileName);
     const fileKey = await redis.get(lookupKey);
     if (!fileKey) {
-        return NextResponse.json({ error: "File not found or access denied" }, { status: 404 });
+        return NextResponse.json({ error: "File not found or access denied" } as ApiError, { status: 404 });
     }
 
     const filePath = join(uploadsDir, fileKey);
@@ -54,6 +55,6 @@ export async function GET(
             },
         });
     } catch {
-        return NextResponse.json({ error: "File not found" }, { status: 404 });
+        return NextResponse.json({ error: "File not found" } as ApiError, { status: 404 });
     }
 }

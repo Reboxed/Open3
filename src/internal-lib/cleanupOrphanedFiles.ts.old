@@ -1,0 +1,44 @@
+// TODO: Didn't have the time to actually properly do this and rather than risk it i just binned it.
+
+// import redis, { GET_LOOKUP_KEY } from "@/internal-libs/redis";
+// import { join } from "path";
+// import { unlink } from "fs/promises";
+
+// async function cleanupOrphanedFiles() {
+//     const allUsers = await redis.keys("USER_FILES:*");
+//     const uploadsDir = join(process.cwd(), "public", "uploads");
+//     for (const userFilesKey of allUsers) {
+//         const userId = userFilesKey.split(":")[1];
+//         const files = await redis.hgetall(userFilesKey);
+//         for (const [randomName, fileMetaRaw] of Object.entries(files)) {
+//             try {
+//                 const fileMeta = JSON.parse(fileMetaRaw);
+//                 if (fileMeta.chat === null || fileMeta.chat === undefined) {
+//                     // Delete file and meta
+//                     const filePath = join(uploadsDir, randomName);
+//                     await unlink(filePath).catch(() => {});
+//                     await unlink(filePath + ".meta.json").catch(() => {});
+//                     // Delete all possible lookup keys
+//                     if (fileMeta.originalName) {
+//                         const nulledLookupKey = GET_LOOKUP_KEY(userId, null, fileMeta.originalName);
+//                         await redis.del(nulledLookupKey);
+//                         // Delete all lookup keys for this file (pattern: USER_FILE_LOOKUP:userId:*:originalName)
+//                         const lookupPattern = `USER_FILE_LOOKUP:${userId}:*:${fileMeta.originalName}`;
+//                         const keys = await redis.keys(lookupPattern);
+//                         for (const key of keys) {
+//                             await redis.del(key);
+//                         }
+//                     }
+//                     // Remove from user files
+//                     await redis.hdel(userFilesKey, randomName);
+//                 }
+//             } catch {}
+//         }
+//     }
+// }
+
+// // Run every 30 minutes
+// setInterval(cleanupOrphanedFiles, 30 * 60 * 1000);
+
+// // Optionally, run once on startup
+// cleanupOrphanedFiles().catch(console.error);

@@ -1,31 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { USER_CHATS_KEY } from "@/app/lib/redis";
-import { GetChat } from "../route";
-import { GoogleGenAI, PartUnion } from "@google/genai";
-import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
-import { NEW_TITLE_EVENT } from "@/app/lib/constants";
-import { TITLE_PROMPT } from "@/constants";
-import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
-import { OpenRouterChat } from "@/app/lib/types/ai";
-import { getChatClass } from "@/app/lib/utils/getChatClass";
+import { USER_CHATS_KEY } from "@/internal-lib/redis";
+import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/internal-lib/eventBus";
+import { NEW_TITLE_EVENT } from "@/internal-lib/constants";
+import { TITLE_PROMPT } from "@/internal-lib/constants";
+import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
+import { getChatClass } from "@/internal-lib/utils/getChatClass";
+import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 
 
 export async function GET(_: NextRequest) {
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failure"
-        }, { status: 500 });
+        } as ApiError, { status: 500 });
     }
 
     const { requireByok, byok, user } = await getUserApiKeys();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
     let eventListener: ((chatId: string, messages: string[]) => Promise<void>) | null = null;
     const generatingChats = new Set<string>();
     let isClosed = false;
 
+    // This stream is kinda not the best but i mean it works just fine 🤷‍♂️
     const stream = new ReadableStream({
         async start(streamController) {
             controller = streamController;
@@ -33,13 +31,13 @@ export async function GET(_: NextRequest) {
             // Create event listener function
             const eventListener = async (chatId: string, messages: string[]) => {
                 if (isClosed || !controller) return;
-                if (generatingChats.has(chatId)) return; // Prevent duplicate processing
-                
+                // Prevent duplicate processing
+                if (generatingChats.has(chatId)) return;
                 generatingChats.add(chatId);
 
                 try {
                     const rawChat = await redis!.hget(USER_CHATS_KEY(user.id), chatId);
-                    let chat: GetChat | null = null;
+                    let chat: ChatResponse | null = null;
                     
                     try {
                         chat = rawChat ? {
@@ -74,8 +72,9 @@ export async function GET(_: NextRequest) {
                         try {
                             chat = getChatClass("openrouter", "google/gemini-1.5-flash", messages.slice(0, -2), TITLE_PROMPT, apiKey);
                         } catch (e) {
-                            return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+                            return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
                         }
+
                         const readableStream = await chat.sendStream({
                             parts: [{ text: messages[messages.length - 1 ]}],
                             role: "user",
@@ -86,8 +85,9 @@ export async function GET(_: NextRequest) {
                             if (isClosed || !controller) break;
                             const { done, value } = await reader.read();
                             if (done) break;
+
                             const text = new TextDecoder().decode(value);
-                            if (text.startsWith('data: ')) {
+                            if (text.startsWith("data: ")) {
                                 fullResponse += text.slice(6);
                                 try {
                                     controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${fullResponse}\n\n`));
@@ -104,7 +104,7 @@ export async function GET(_: NextRequest) {
                         await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                             ...chat,
                             label: finalTitle,
-                        } as GetChat));
+                        } as ChatResponse));
                     } catch (error) {
                         console.error(`Error generating title for chat ${chatId}:`, error);
                         
@@ -114,7 +114,7 @@ export async function GET(_: NextRequest) {
                             await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                                 ...chat,
                                 label: fallbackTitle,
-                            } as GetChat));
+                            } as ChatResponse));
                         } catch (saveError) {
                             console.error(`Failed to set fallback title for ${chatId}:`, saveError);
                         }

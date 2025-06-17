@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import Redis from "ioredis";
 
 declare global {
   var redis: Redis | undefined;
@@ -13,8 +13,8 @@ let redis: Redis;
   redis = global.redis;
 }
 
-redis.on('error', (err) => {
-  console.error('Redis Client Error', err);
+redis.on("error", (err) => {
+  console.error("Redis Client Error", err);
 });
 
 export const USER_SETTINGS_KEY = (userId: string) => `user:${userId}:settings`;

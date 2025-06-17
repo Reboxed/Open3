@@ -72,8 +72,8 @@ export default function Dropdown({ className, label, items: options, name, optio
     const groupedByProvider = React.useMemo(() => {
         const groups: Record<string, DropdownOption[]> = {};
         options.forEach(opt => {
-            // Use opt.provider or opt.developer if available, fallback to 'Other'
-            const provider = opt.developer || opt.provider || 'Other';
+            // Use opt.provider or opt.developer if available, fallback to "Other"
+            const provider = opt.developer || opt.provider || "Other";
             if (!groups[provider]) groups[provider] = [];
             groups[provider].push(opt);
         });
@@ -164,7 +164,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                 className={`h-full !cursor-pointer font-semibold flex items-center gap-1 overflow-visible w-full focus:[&>#dropdown]:invert-0 focus:[&>#dropdown]:opacity-80`}
                 style={{ textAlign: "left", width: "auto", minWidth: 0 }}
             >
-                <span id="dropdown" className="font-normal whitespace-nowrap overflow-visible text-ellipsis" style={{ maxWidth: '100%' }}>{label}</span>
+                <span id="dropdown" className="font-normal whitespace-nowrap overflow-visible text-ellipsis" style={{ maxWidth: "100%" }}>{label}</span>
                 {
                     !settings?.hideSelectedElement ? (
                         <>
@@ -172,7 +172,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                             {selectedOption.icon ?
                                 <Image id="selectedIcon" src={selectedOption.icon} className={`mr-2`} width={18} height={18} alt={`${selectedOption.name} icon`} title={`${selectedOption.name} icon`} />
                                 : null}
-                            <span className="mr-auto text-left whitespace-nowrap overflow-visible text-ellipsis font-medium" style={{ maxWidth: '100%' }}>
+                            <span className="mr-auto text-left whitespace-nowrap overflow-visible text-ellipsis font-medium" style={{ maxWidth: "100%" }}>
                                 {
                                     selectedOption.activeName ? selectedOption.activeName :
                                         settings?.autoCapitilisation ? selectedOption.name[0].toUpperCase() + selectedOption.name.slice(1) :
@@ -212,16 +212,16 @@ export default function Dropdown({ className, label, items: options, name, optio
                     `}</style>
                     <div
                         id="dropdown"
-                        className={`absolute w-max mx-auto dropdown transition-all z-50 shadow-highlight rounded-3xl ${isClosing ? 'dropdown-fadeout' : 'dropdown-fadein'}`}
+                        className={`absolute w-max mx-auto dropdown transition-all z-50 shadow-highlight rounded-3xl ${isClosing ? "dropdown-fadeout" : "dropdown-fadein"}`}
                         style={{
                             position: "absolute",
                             left: dropdownPosition.left - 24,
                             top: dropdownPosition.top + 60,
                             minWidth: dropdownPosition.width,
-                            maxWidth: '90vw',
-                            maxHeight: '60vh',
-                            overflowY: 'auto',
-                            boxSizing: 'border-box',
+                            maxWidth: "90vw",
+                            maxHeight: "60vh",
+                            overflowY: "auto",
+                            boxSizing: "border-box",
                             ...(dropdownPosition.left + dropdownPosition.width > window.innerWidth ? {
                                 left: Math.max(window.innerWidth - dropdownPosition.width - 16, 8),
                             } : {})
@@ -254,7 +254,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                                                         px-3 py-2 rounded-lg transition-all
                                                     `}>
                                                         {typedModels[0].icon ? (
-                                                            <Image src={typedModels[0].icon} width={18} height={18} alt={provider + ' logo'} className="rounded" />
+                                                            <Image src={typedModels[0].icon} width={18} height={18} alt={provider + " logo"} className="rounded" />
                                                         ) : null}
                                                         <span className="flex items-center gap-5 font-medium text-sm text-left w-full truncate">
                                                             {settings?.autoCapitilisation ? option.name[0].toUpperCase() + option.name.slice(1) : option.name}

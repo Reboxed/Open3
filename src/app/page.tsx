@@ -9,9 +9,8 @@
 import React, { useState, useTransition, useEffect } from "react";
 import ChatInput from "./components/ChatInput";
 import { useRouter } from "next/navigation";
-import 'highlight.js/styles/github-dark.css'; // Change to preferred style
-import { CreateChatResponse, CreateChatRequest } from "./api/chat/route";
-import { ApiError } from "@/app/lib/types/api";
+import "highlight.js/styles/github-dark.css"; // Change to preferred style
+import { ApiError, CreateChatRequest, CreateChatResponse } from "@/internal-lib/types/api";
 import { addTabs } from "./lib/utils/loadTabs";
 import { SignedIn, SignedOut, SignInButton, useClerk } from "@clerk/nextjs";
 import { useRecentChats } from "./hooks/useRecentChats";
@@ -69,7 +68,7 @@ export default function Home() {
             <div
                 style={{ gridTemplateColumns: `repeat(4, minmax(0, 1fr))` }}
                 className={
-                    'grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/60 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip'
+                    "grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/60 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip"
                 }
             >
                 {Array.from({ length: 4 }).map((_, i) => (

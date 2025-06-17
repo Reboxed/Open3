@@ -2,8 +2,7 @@
 
 import React from "react";
 import useSWR from "swr";
-import { GetChat, GetChatsResponse } from "../api/chat/route";
-import { ApiError } from "../lib/types/api";
+import { ApiError, ChatResponse, GetChatsResponse } from "../../internal-lib/types/api";
 import { FormEventHandler, useEffect, useRef, useState, useMemo } from "react";
 import { addTabs } from "../lib/utils/loadTabs";
 import { useRouter } from "next/navigation";
@@ -88,15 +87,15 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     // Detect touch device
     useEffect(() => {
         const checkTouchDevice = () => {
-            setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+            setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
         };
         checkTouchDevice();
-        window.addEventListener('resize', checkTouchDevice);
-        return () => window.removeEventListener('resize', checkTouchDevice);
+        window.addEventListener("resize", checkTouchDevice);
+        return () => window.removeEventListener("resize", checkTouchDevice);
     }, []);
 
     const router = useRouter();
-    function createTab(chat: GetChat) {
+    function createTab(chat: ChatResponse) {
         addTabs(localStorage, {
             id: chat.id,
             label: chat.label ?? "New Tab",
@@ -275,14 +274,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
 
         setTimeout(async () => {
             try {
-                const result = await fetch('/api/chat/bulk', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
+                const result = await fetch("/api/chat/bulk", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ chatIds: chatIdsToDelete })
                 }).then(res => res.json());
 
                 if (!result.success) {
-                    console.error('Bulk delete failed:', result.error);
+                    console.error("Bulk delete failed:", result.error);
                     return;
                 }
 
@@ -306,7 +305,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
 
                 mutate(); // revalidate SWR
             } catch (error) {
-                console.error('Failed to delete chats:', error);
+                console.error("Failed to delete chats:", error);
             } finally {
                 setDeletingId(null);
             }
@@ -362,7 +361,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         setLoadingMore(true);
         fetch(`/api/chat?page=${page}&limit=25`).then(res => res.json() as Promise<GetChatsResponse | ApiError>)
             .then(chats => {
-                if (!('error' in chats)) {
+                if (!("error" in chats)) {
                     setLocalChats(prev => {
                         let mergedChats;
                         if (page === 1) {
@@ -397,8 +396,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 setPage(p => p + 1);
             }
         }
-        list.addEventListener('scroll', onScroll);
-        return () => list.removeEventListener('scroll', onScroll);
+        list.addEventListener("scroll", onScroll);
+        return () => list.removeEventListener("scroll", onScroll);
     }, [hasMore, loadingMore]);
 
     // Platform shortcut label (fix hydration)
@@ -517,7 +516,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 ul {
                     scrollbar-width: thin;
                     scrollbar-color: rgba(255,255,255,0.1) transparent;
-                    /* Overlay scrollbar so it doesn't move content */
+                    /* Overlay scrollbar so it doesn"t move content */
                 }
             `}</style>
             <div
@@ -556,7 +555,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 {bulkDeleteMode && (
                     <div className="flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 items-center justify-between backdrop-blur-2xl shadow-highlight rounded-2xl">
                         <div className="text-neutral-300/80 text-sm">
-                            {selectedChatIds.size} chat{selectedChatIds.size !== 1 ? 's' : ''} selected
+                            {selectedChatIds.size} chat{selectedChatIds.size !== 1 ? "s" : ""} selected
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -651,7 +650,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         setLongPressActive(chat.id);
                                                         
                                                         // Trigger haptic feedback if available
-                                                        if ('vibrate' in navigator) {
+                                                        if ("vibrate" in navigator) {
                                                             navigator.vibrate(50);
                                                         }
                                                         
@@ -787,15 +786,15 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     style={{
                                                         opacity: flatIdx === selected[0] ? 1 : -1,
                                                         translate: flatIdx === selected[0] ? "0 0" : "50px 0",
-                                                        background: pendingDeleteId === chat.id ? '#ef4444' : undefined,
-                                                        color: pendingDeleteId === chat.id ? '#fff' : undefined,
-                                                        border: pendingDeleteId === chat.id ? '1px solid #ef4444' : undefined,
-                                                        width: 32, height: 32, position: 'relative',
+                                                        background: pendingDeleteId === chat.id ? "#ef4444" : undefined,
+                                                        color: pendingDeleteId === chat.id ? "#fff" : undefined,
+                                                        border: pendingDeleteId === chat.id ? "1px solid #ef4444" : undefined,
+                                                        width: 32, height: 32, position: "relative",
                                                     }}
                                                     className={`
                                                         bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
                                                         hover:opacity-100 hover:translate-0 hover:bg-white/20
-                                                        ${pendingDeleteId === chat.id ? '!bg-red-500 !text-white' : ''}
+                                                        ${pendingDeleteId === chat.id ? "!bg-red-500 !text-white" : ""}
                                                     `}
                                                     onClick={e => {
                                                         e.stopPropagation();
@@ -815,14 +814,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         }
                                                     }}
                                                 >
-                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(0)' : 'scale(1)', zIndex: pendingDeleteId === chat.id ? 0 : 1 }}>
+                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? "scale(0)" : "scale(1)", zIndex: pendingDeleteId === chat.id ? 0 : 1 }}>
                                                         {/* Trash SVG */}
                                                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
                                                             <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
                                                             <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
                                                         </svg>
                                                     </span>
-                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(1)' : 'scale(0)', zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
+                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? "scale(1)" : "scale(0)", zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
                                                         {/* Checkmark SVG */}
                                                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                             <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />

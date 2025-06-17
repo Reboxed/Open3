@@ -1,21 +1,21 @@
 // TODO: Merge the regenerate and send routes files
 
 import { NextRequest, NextResponse } from "next/server";
-import redis, { CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
-import { GetChat } from "../../route";
+import redis, { CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
 import { Message } from "@/app/lib/types/ai";
-import { getChatClass } from "@/app/lib/utils/getChatClass";
-import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
+import { getChatClass } from "@/internal-lib/utils/getChatClass";
+import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
+import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
-        return new Response(JSON.stringify({ error: "Redis connection failure" }), { status: 500 });
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
     // Get user and API keys and check error: Script not found "npm"authorization
     const { requireByok, byok, user } = await getUserApiKeys();
-    if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    if (user.banned) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     const { id } = await params;
     const url = new URL(req.url);
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const attachmentsParam = url.searchParams.get("attachments");
     const attachments = attachmentsParam ? JSON.parse(attachmentsParam) : [];
     if (isNaN(fromIndex) || fromIndex < 1) {
-        return new Response(JSON.stringify({ error: "Invalid fromIndex" }), { status: 400 });
+        return NextResponse.json({ error: "Invalid fromIndex" } as ApiError, { status: 400 });
     }
 
     const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
@@ -35,13 +35,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
-    let chatJson: GetChat | null;
+    let chatJson: ChatResponse | null;
     try {
         chatJson = rawChat ? { ...JSON.parse(rawChat), id } : null;
     } catch {
         chatJson = null;
     }
-    if (!chatJson) return new Response(JSON.stringify({ error: 'Failed to get chat' }), { status: 404 });
+    if (!chatJson) return NextResponse.json({ error: "Failed to get chat" } as ApiError, { status: 404 });
 
     const prevMessages = keepMessages.map(msgStr => {
         try { return JSON.parse(msgStr); } catch { return null; }
@@ -49,13 +49,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Use provider and model from chatJson
     const apiKey = getProviderApiKey(chatJson.provider, byok);
     if (requireByok && !apiKey) {
-        return new Response(JSON.stringify({ error: `API key required for ${chatJson.provider}` }), { status: 403 });
+        return NextResponse.json({ error: `API key required for ${chatJson.provider}` } as ApiError, { status: 403 });
     }
     let chat;
     try {
         chat = getChatClass(chatJson.provider, chatJson.model, prevMessages, undefined, apiKey);
     } catch (e) {
-        return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+        return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
     }
 
     const userMessage: Message = {
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                         redis.set(CHAT_GENERATING_KEY(chatJson.id), "1", "EX", 60).catch(() => null);
 
                         const chunkText = new TextDecoder().decode(value);
-                        if (chunkText.startsWith('data: ')) {
+                        if (chunkText.startsWith("data: ")) {
                             try {
                                 fullResponse += chunkText.slice(6).trim();
                             } catch (e) {
@@ -114,8 +114,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
         });
     } catch (error) {
-        console.error('Failed to generate content:', error);
-        return new Response(JSON.stringify({ error: 'Failed to generate content', details: (error as Error).message }), { status: 500 });
+        console.error("Failed to generate content:", error);
+        return NextResponse.json({ error: "Failed to generate content", details: (error as Error).message } as ApiError, { status: 500 });
     } finally {
         // Ensure generating state is cleared even if an error occurs
         await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {

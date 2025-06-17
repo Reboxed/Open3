@@ -145,11 +145,11 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
         function handleKeyDown(e: KeyboardEvent) {
             // Don't trigger shortcuts in input, textarea, or contenteditable
             // const target = e.target as HTMLElement;
-            // if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            // if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
             // Debug log
-            // console.log('keydown', e.key, e.code, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey);
+            // console.log("keydown", e.key, e.code, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey);
             // Close tab: Alt/Opt+W
-            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key.toLowerCase() === 'w' || e.code === 'KeyW')) {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key.toLowerCase() === "w" || e.code === "KeyW")) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (tabs[activeTab] && !tabs[activeTab].permanent) {
@@ -158,7 +158,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 return;
             }
             // Next tab: Alt/Opt+Tab
-            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
                 e.preventDefault();
                 e.stopPropagation();
                 let nextIdx = activeTab + 1;
@@ -167,7 +167,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 return;
             }
             // Previous tab: Alt/Opt+Shift+Tab
-            if (e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && (e.key === 'Tab' || e.code === 'Tab')) {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
                 e.preventDefault();
                 e.stopPropagation();
                 let prevIdx = activeTab - 1;
@@ -176,15 +176,15 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 return;
             }
         }
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
     }, [activeTab, tabs, onCloseTabClick, onTabChangeClick]);
 
     // Detect OS for shortcut display
-    const [closeShortcut, setCloseShortcut] = useState('Alt+W');
+    const [closeShortcut, setCloseShortcut] = useState("Alt+W");
     useEffect(() => {
-        const isMac = navigator.userAgent.toLowerCase().includes('mac');
-        setCloseShortcut(isMac ? '⌥W' : 'Alt+W');
+        const isMac = navigator.userAgent.toLowerCase().includes("mac");
+        setCloseShortcut(isMac ? "⌥W" : "Alt+W");
     }, []);
 
     return (

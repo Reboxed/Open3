@@ -126,14 +126,14 @@ export function Navbar() {
     // Keyboard shortcut for palette
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
-            const isMac = navigator.userAgent.toLowerCase().includes('mac');
-            if ((isMac && e.metaKey && e.key.toLowerCase() === 'k') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'k')) {
+            const isMac = navigator.userAgent.toLowerCase().includes("mac");
+            if ((isMac && e.metaKey && e.key.toLowerCase() === "k") || (!isMac && e.ctrlKey && e.key.toLowerCase() === "k")) {
                 e.preventDefault();
                 setShowPalette(true);
             }
         }
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
     }, []);
 
     // Listen for chat title updates from fallback title generation
@@ -145,8 +145,8 @@ export function Navbar() {
             }
         }
 
-        window.addEventListener('chatTitleUpdate', handleTitleUpdate as EventListener);
-        return () => window.removeEventListener('chatTitleUpdate', handleTitleUpdate as EventListener);
+        window.addEventListener("chatTitleUpdate", handleTitleUpdate as EventListener);
+        return () => window.removeEventListener("chatTitleUpdate", handleTitleUpdate as EventListener);
     }, []);
 
     // Add settings button for BYOK

@@ -1,10 +1,10 @@
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY, USER_FILES_KEY } from "@/app/lib/redis";
-import { GetChat } from "../route";
+import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY, USER_FILES_KEY } from "@/internal-lib/redis";
 import { join } from "path";
 import { unlink } from "fs/promises";
+import { ApiError } from "@/internal-lib/types/api";
 
 interface ChatResponse {
     id: string;
@@ -18,16 +18,16 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     if (!redis) {
         return NextResponse.json({
             error: "Redis connection failure"
-        }, { status: 500 });
+        } as ApiError, { status: 500 });
     }
 
     const user = await auth();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!user.userId) return NextResponse.json({ exists: [] }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (!user.userId) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
     const { id } = await params;
     const rawChat = await redis.hget(USER_CHATS_KEY(user.userId), id);
-    let chat: GetChat | null;
+    let chat: ChatResponse | null;
     try {
         chat = rawChat ? {
             ...JSON.parse(rawChat),
@@ -36,7 +36,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     } catch {
         chat = null;
     }
-    if (!chat) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
+    if (!chat) return NextResponse.json({ error: "Failed to get chat" } as ApiError, { status: 404 });
 
     return NextResponse.json({
         id: chat.id,
