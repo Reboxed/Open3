@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef, FormEventHandler } from "react";
+import { useEffect, useState, useRef, FormEventHandler } from "react";
 import { URLSearchParams } from "url";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
@@ -9,9 +9,12 @@ type ChatInputProps = {
     /**
      * @returns the new value to set the input field to after. Default is "".
     **/
-    onSend?: (message: string, attachments: { url: string; filename: string }[]) => OptionalReturn<string>;
+    onSend?: (message: string, attachments: { url: string; filename: string }[], model: string, provider: string) => OptionalReturn<string>;
     className?: string;
     loading?: boolean;
+    model?: string;
+    provider?: string;
+    onModelChange?: (model: string, provider: string) => void;
 };
 
 function ErrorToast({ message, onClose }: { message: string, onClose: () => void }) {
@@ -26,22 +29,48 @@ function ErrorToast({ message, onClose }: { message: string, onClose: () => void
     );
 }
 
-export default function ChatInput({ onSend, className, loading }: ChatInputProps) {
+// Type for model capabilities
+interface ModelCapabilities {
+    model: string;
+    name: string;
+    provider: string;
+    supportsAttachments: boolean;
+    supportsImages: boolean;
+    supportsStreaming: boolean;
+    description?: string;
+}
+
+export default function ChatInput({ onSend, className, loading, model: initialModel = "Gemini 2.5 Flash", provider: initialProvider = "google", onModelChange }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState("");
-    const [makeImage, setMakeImage] = useState(false);
-    const [search, setSearch] = useState(false);
+    // const [makeImage, setMakeImage] = useState(false);
+    // const [search, setSearch] = useState(false);
     const [enableAttachments, setEnableAttachments] = useState(false);
     const [attachments, setAttachments] = useState<{ url: string; filename: string }[]>([]);
     const [errorToast, setErrorToast] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [model, setModel] = useState(initialModel);
+    const [provider, setProvider] = useState(initialProvider);
+    const [modelCapabilities, setModelCapabilities] = useState<ModelCapabilities[]>([]);
 
     useEffect(() => {
         const label = labelRef.current;
         if (!label) return;
         label.hidden = inputValue.trim() != "" || inputValue.trim().split("\n").length > 2;
     }, [inputValue])
+
+    // Fetch model capabilities on mount
+    useEffect(() => {
+        fetch("/api/models")
+            .then(res => res.json())
+            .then(setModelCapabilities)
+            .catch(() => setModelCapabilities([]));
+    }, []);
+
+    // Find the selected model's capabilities
+    const selectedModel = modelCapabilities.find(m => m.name === model || m.model === model);
+    console.log("Model capabilities fetched:", selectedModel);
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -83,7 +112,7 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
         if (loading) return;
         if (!inputValue.trim() && attachments.length === 0) return;
 
-        const newContentRaw = onSend?.(inputValue, attachments);
+        const newContentRaw = onSend?.(inputValue, attachments, model, provider);
         const newContent = newContentRaw instanceof Promise ? await newContentRaw : newContentRaw;
 
         const input = inputRef.current;
@@ -97,6 +126,9 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
     const onInput: FormEventHandler<HTMLDivElement> = (e) => {
         setInputValue(e.currentTarget.innerText.trim());
     }
+
+    // Hide attachment button if not supported by selected model
+    const showAttachmentButton = selectedModel?.supportsAttachments;
 
     return (
         <div className={`bg-[#222121] rounded-[36px] flex flex-col justify-stretch shadow-[inset_0_0_35px_#000,0_8px_20px_rgba(0,0,0,0.1)]/30 sticky bottom-6 max-md:bottom-4 ${className}`} style={{
@@ -127,46 +159,54 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
 
                     <div className="flex justify-between items-stretch gap-5">
                         <div className="flex gap-3 items-stretch">
-                            <select className="cursor-pointer text-neutral-50/65">
-                                <option>Gemini 2.5 Flash</option>
-                                <option>Gemini 2 Pro</option>
+                            <select className="cursor-pointer text-neutral-50/65" value={model} onChange={e => {
+                                const value = e.target.value;
+                                setModel(value);
+                                const cap = modelCapabilities.find(m => m.name === value || m.model === value);
+                                const prov = cap?.provider || "google";
+                                setProvider(prov);
+                                onModelChange?.(value, prov);
+                            }}>
+                                {modelCapabilities.map(m => (
+                                    <option key={m.model} value={m.model}>
+                                        {m.name}
+                                        {" - "}
+                                        {m.supportsAttachments && "Attachments - "}
+                                        {m.supportsImages && "Image Gen - "}
+                                        {m.supportsStreaming && "Streaming - "}
+                                    </option>
+                                ))}
                             </select>
-                            {/* <button onClick={() => setSearch(!search)}
-                                className={`max-sm:hidden ${search ? "text-neutral-50 bg-primary shadow-active-button" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full px-4 py-1.5 min-w-fit cursor-pointer transition-all duration-200`}
-                            >Search</button>
-                            <button onClick={() => setMakeImage(!makeImage)}
-                                className={`max-sm:hidden ${makeImage ? "text-neutral-50 bg-primary shadow-active-button" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full px-4 py-1.5 min-w-fit cursor-pointer transition-all duration-200`}
-                            >
-                                Make image
-                            </button> */}
-                            <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
-                                className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}
-                            >
-                                <svg width="26" height="26" viewBox="0 0 19 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <g filter="url(#filter0_di_3138_685)">
-                                        <path d="M10.3854 7.81831L7.7509 11.2884C7.21033 12.0004 7.34934 13.0159 8.06138 13.5564V13.5564C8.77341 14.097 9.78882 13.958 10.3294 13.2459L13.6406 8.88427C14.5354 7.70565 14.3053 6.02483 13.1267 5.13006V5.13006C11.948 4.2353 10.2672 4.46541 9.37246 5.64403L5.31426 10.9897C4.06553 12.6346 4.38668 14.9803 6.03156 16.229V16.229C7.67644 17.4778 10.0222 17.1566 11.2709 15.5117L14.3436 11.4642"
-                                            stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-                                    </g>
-                                    <defs>
-                                        <filter id="filter0_di_3138_685" x="0.882069" y="0.911854" width="17.1343" height="19.751" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-                                            <feFlood floodOpacity="0" result="BackgroundImageFix" />
-                                            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
-                                            <feOffset />
-                                            <feGaussianBlur stdDeviation="1.52381" />
-                                            <feComposite in2="hardAlpha" operator="out" />
-                                            <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.32 0" />
-                                            <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_3138_685" />
-                                            <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_3138_685" result="shape" />
-                                            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
-                                            <feOffset />
-                                            <feGaussianBlur stdDeviation="0.571429" />
-                                            <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1" />
-                                            <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.32 0" />
-                                            <feBlend mode="normal" in2="shape" result="effect2_innerShadow_3138_685" />
-                                        </filter>
-                                    </defs>
-                                </svg>
-                            </button>
+                            {showAttachmentButton && (
+                                <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
+                                    className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}
+                                >
+                                    <svg width="26" height="26" viewBox="0 0 19 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <g filter="url(#filter0_di_3138_685)">
+                                            <path d="M10.3854 7.81831L7.7509 11.2884C7.21033 12.0004 7.34934 13.0159 8.06138 13.5564V13.5564C8.77341 14.097 9.78882 13.958 10.3294 13.2459L13.6406 8.88427C14.5354 7.70565 14.3053 6.02483 13.1267 5.13006V5.13006C11.948 4.2353 10.2672 4.46541 9.37246 5.64403L5.31426 10.9897C4.06553 12.6346 4.38668 14.9803 6.03156 16.229V16.229C7.67644 17.4778 10.0222 17.1566 11.2709 15.5117L14.3436 11.4642"
+                                                stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+                                        </g>
+                                        <defs>
+                                            <filter id="filter0_di_3138_685" x="0.882069" y="0.911854" width="17.1343" height="19.751" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+                                                <feFlood floodOpacity="0" result="BackgroundImageFix" />
+                                                <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+                                                <feOffset />
+                                                <feGaussianBlur stdDeviation="1.52381" />
+                                                <feComposite in2="hardAlpha" operator="out" />
+                                                <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.32 0" />
+                                                <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_3138_685" />
+                                                <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_3138_685" result="shape" />
+                                                <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+                                                <feOffset />
+                                                <feGaussianBlur stdDeviation="0.571429" />
+                                                <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1" />
+                                                <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.32 0" />
+                                                <feBlend mode="normal" in2="shape" result="effect2_innerShadow_3138_685" />
+                                            </filter>
+                                        </defs>
+                                    </svg>
+                                </button>
+                            )}
                         </div>
                         <button type="submit" className="bg-white text-black rounded-full px-4 py-1.5 cursor-pointer font-semibold disabled:opacity-50" disabled={loading}>
                             {loading ? "Generating" : "Send"}

@@ -1,8 +1,9 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import redis, { CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
-import { GeminiChat, Message } from "@/app/lib/types/ai";
+import { Message } from "@/app/lib/types/ai";
+import { getChatClass } from "@/app/lib/utils/getChatClass";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     if (!redis) {
@@ -40,7 +41,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const prevMessages = keepMessages.map(msgStr => {
         try { return JSON.parse(msgStr); } catch { return null; }
     }).filter(Boolean);
-    const chat = new GeminiChat(prevMessages, chatJson.model);
+    // Use provider and model from chatJson
+    let chat;
+    try {
+        chat = getChatClass(chatJson.provider, chatJson.model, prevMessages);
+    } catch (e) {
+        return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+    }
     
     const userMessage: Message = {
         role: "user",

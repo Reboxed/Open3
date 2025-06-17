@@ -225,7 +225,7 @@ export default function Chat() {
             {generating && autoScroll && (
                 <button
                     onClick={handleStopAutoScroll}
-                    className="z-50 top-18 backdrop-blur-2xl sticky left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
+                    className="z-50 top-18 backdrop-blur-2xl fixed left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
                     aria-label="Stop automatic scroll"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">

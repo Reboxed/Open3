@@ -1,16 +1,15 @@
 "use server";
 
 import { CreateChatRequest, CreateChatResponse, GetChat } from "@/app/api/chat/route";
-import { GeminiChat } from "../types/ai";
+import { getChatClass } from "@/app/lib/utils/getChatClass";
 import { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "../redis";
 
 export async function createChat(userId: string, { model, provider }: CreateChatRequest): Promise<CreateChatResponse> {
     if (!redis) throw "Redis connection failure";
 
     const id = crypto.randomUUID();
-    // TODO: Provider
-    const chat = new GeminiChat([], model ?? "gemini-2.0-flash"); // TODO: make it use the model
-    chat.provider = provider;
+    // Use getChatClass to instantiate the correct chat class
+    const chat = getChatClass(provider, model, []);
 
     const result = await redis.multi()
         .hset(USER_CHATS_KEY(userId), id, JSON.stringify({
@@ -30,7 +29,7 @@ export async function createChat(userId: string, { model, provider }: CreateChat
 
     return {
         id,
-        model,
-        provider
+        model: chat.model,
+        provider: chat.provider
     };
 }

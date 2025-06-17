@@ -8,20 +8,22 @@ import { CreateChatResponse, CreateChatRequest } from "./api/chat/route";
 import { ApiError } from "@/app/lib/types/api";
 import { addTabs } from "./lib/utils/loadTabs";
 import { useClerk } from "@clerk/nextjs";
+import { useRecentChats } from "./hooks/useRecentChats";
 
 export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
     const [isPending, startTransition] = useTransition();
+    const [selectedModel, setSelectedModel] = useState<string>("");
+    const [selectedProvider, setSelectedProvider] = useState<string>("");
     const router = useRouter();
 
-    async function onSend(msg: string, attachments: { url: string; filename: string }[] = []) {
+    async function onSend(msg: string, attachments: { url: string; filename: string }[] = [], model?: string, provider?: string) {
         setIsLoading(true);
-
         const chat = await fetch("/api/chat", {
             method: "POST",
             body: JSON.stringify({
-                model: "gemini-2.0-flash",
-                provider: "google",
+                model: model || selectedModel || "gemini-1.5-flash-latest",
+                provider: provider || selectedProvider || "google",
             } as CreateChatRequest),
         }).then(res => res.json() as Promise<CreateChatResponse | ApiError>)
             .catch(() => undefined);
@@ -29,13 +31,11 @@ export default function Home() {
             setIsLoading(false);
             return;
         }
-
         sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, tabId: chat.id }));
         addTabs(localStorage, {
             id: chat.id,
             link: `/${chat.id}`
         });
-
         setIsLoading(false);
         startTransition(() => {
             router.push(`/${chat.id}`);
@@ -43,36 +43,39 @@ export default function Home() {
     }
 
     const auth = useClerk();
+    const recentChats = useRecentChats(4);
+    // Dynamically set grid columns based on chat count (min 1, max 4)
+    const gridCols = recentChats.length > 0 ? Math.min(4, recentChats.length) : !recentChats.length ? 1 : 4;
     return (
         <div className="min-w-full min-h-0 flex-1 flex flex-col justify-center items-center">
             <div className="flex flex-col gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
                 <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
-                <ChatInput onSend={onSend} loading={isLoading || isPending} className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`} />
-                <div className="grid grid-cols-4 gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121] [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip">
-                    <div className="w-full h-full aspect-square">
-                        <span className="!text-white line-clamp-1">Pygame bouncing ball in spinning</span>
-                        <p className="opacity-65 line-clamp-6">
-                            Hey, can you generate me an application in pygame that contains a hexagon in which balls physically accurate bounce around and fuck around.
-                        </p>
+                <ChatInput
+                    onSend={onSend}
+                    loading={isLoading || isPending}
+                    className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`}
+                    onModelChange={(model, provider) => {
+                        setSelectedModel(model);
+                        setSelectedProvider(provider);
+                    }}
+                />
+                {recentChats.length === 0 && (
+                    <div className="w-full flex h-[230px] justify-center text-neutral-400 py-4 drop-shadow-md">
+                        Here your recent chats will show! Start a new chat to see them here
                     </div>
-                    <div className="w-full h-full aspect-square">
-                        <span className="!text-white line-clamp-1">Pygame bouncing ball in spinning</span>
-                        <p className="opacity-65 line-clamp-6">
-                            Hey, can you generate me an application in pygame that contains a hexagon in which balls physically accurate bounce around and fuck around.
-                        </p>
-                    </div>
-                    <div className="w-full h-full aspect-square">
-                        <span className="!text-white line-clamp-1">Pygame bouncing ball in spinning</span>
-                        <p className="opacity-65 line-clamp-6">
-                            Hey, can you generate me an application in pygame that contains a hexagon in which balls physically accurate bounce around and fuck around.
-                        </p>
-                    </div>
-                    <div className="w-full h-full aspect-square">
-                        <span className="!text-white line-clamp-1">Pygame bouncing ball in spinning</span>
-                        <p className="opacity-65 line-clamp-6">
-                            Hey, can you generate me an application in pygame that contains a hexagon in which balls physically accurate bounce around and fuck around.
-                        </p>
-                    </div>
+                )}
+                <div
+                    style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                    className={`grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
+                >
+                    {recentChats.map(chat => (
+                        <div key={chat.id} className="w-full h-full max-h-[230px] cursor-pointer" onClick={() => router.push(`/${chat.id}`)}>
+                            <span className="!text-white line-clamp-1">{chat.label || "Untitled"}</span>
+                            <p className="opacity-65 line-clamp-6 whitespace-pre-line">
+                                {chat.firstResponse || <span className="italic opacity-40">No LLM response yet.</span>}
+                            </p>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>

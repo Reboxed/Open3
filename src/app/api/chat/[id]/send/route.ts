@@ -1,11 +1,11 @@
-import { GeminiChat, Message } from "@/app/lib/types/ai";
+import { GeminiChat, OpenAIChat, Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_FILES_KEY, GET_LOOKUP_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
 import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { join } from "path";
-//import { URL_PREFIX } from "@/app/api/upload/route";
+import { getChatClass } from "@/app/lib/utils/getChatClass";
 
 // Helper to load file data for an attachment and return parts to inject
 async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: { userId: string, chatId: string, originalName: string, uploadsDir: string }) {
@@ -43,7 +43,7 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
     let fileMeta = null;
     const file = await redis.hget(USER_FILES_KEY(userId), randomName);
     if (file) {
-        try { fileMeta = JSON.parse(file); } catch {}
+        try { fileMeta = JSON.parse(file); } catch { }
     }
     try {
         const filePath = join(uploadsDir, randomName);
@@ -53,7 +53,7 @@ async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: 
         try {
             const metaRaw = await readFile(metaPath, "utf8");
             meta = JSON.parse(metaRaw);
-        } catch {}
+        } catch { }
         const ext = originalName.split('.').pop()?.toLowerCase() || "";
         const isImage = ["png", "jpg", "jpeg", "gif", "bmp", "webp"].includes(ext);
         if (isImage) {
@@ -116,14 +116,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    // Get attachments from the request
+    const requestedModel = searchParams.get('model');
+    const requestedProvider = searchParams.get('provider');
+
     const attachmentsParam = searchParams.get('attachments');
     const attachments = attachmentsParam ? JSON.parse(attachmentsParam) : [];
-
-    const isGenerating = await redis.get(CHAT_GENERATING_KEY(id));
-    if (isGenerating) {
-        return NextResponse.json({ error: "You're already generating in this chat." }, { status: 400 });
-    }
 
     const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
     let chatJson: GetChat | null;
@@ -137,7 +134,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (!chatJson) return NextResponse.json({ error: 'Failed to get chat' }, { status: 404 });
 
-    // Load existing messages from Redis to provide context
     const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
     const existingMessages: Message[] = messageStrings.map(msgStr => {
         try {
@@ -158,7 +154,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
     }
 
-    const chat = new GeminiChat(existingMessages, chatJson.model);
+    const chatModel = requestedModel || chatJson.model;
+    const chatProvider = requestedProvider || chatJson.provider;
+    let chat;
+    try {
+        chat = getChatClass(chatProvider, chatModel, existingMessages);
+    } catch (e) {
+        return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
+    }
 
     // Save user message to Redis (only file paths in attachments, no file data in parts)
     const userMessage: Message = {
@@ -268,6 +271,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
         });
     } catch (error) {
+        console.error("Error during chat generation:", error);
         return NextResponse.json({ error: 'Failed to generate content', details: (error as Error).message }, { status: 500 });
     } finally {
         await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {

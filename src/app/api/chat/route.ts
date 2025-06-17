@@ -8,7 +8,7 @@ import { createChat } from "@/app/lib/utils/createChat";
 
 export interface CreateChatRequest {
     model: string;
-    provider: string; // Specify the provider
+    provider: string;
 }
 
 export interface CreateChatResponse {
@@ -112,6 +112,8 @@ export async function POST(req: NextRequest) {
     if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
         return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
     }
+
+    console.log(model, provider);
 
     const result = await createChat(user.id, { model, provider });
     return NextResponse.json(result as CreateChatResponse, { status: 201 });
