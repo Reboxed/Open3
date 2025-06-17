@@ -108,7 +108,17 @@ export default function Home() {
                     className={`grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
                 >
                     {recentChats.map(chat => (
-                        <div key={chat.id} className="w-full h-full h-[230px] cursor-pointer" onClick={() => router.push(`/${chat.id}`)}>
+                        <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {
+                            addTabs(localStorage, {
+                                id: chat.id,
+                                label: chat.label ?? "New Tab",
+                                link: `/${chat.id}`
+                            });
+
+                            setTimeout(() => {
+                                router.push(`/${chat.id}`)
+                            }, 75); // Delay to allow navigation to start
+                        }}>
                             <span className="!text-white line-clamp-1">{chat.label || "Untitled"}</span>
                             <p className="opacity-65 line-clamp-6 whitespace-pre-line">
                                 {chat.firstResponse || <span className="italic opacity-40">No LLM response yet.</span>}
