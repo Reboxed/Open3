@@ -39,6 +39,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const touchStartRef = useRef<{ chatId: string; startTime: number } | null>(null);
     const [longPressActive, setLongPressActive] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const { data, isLoading, mutate } = useSWR("/api/chat", async path => {
         return fetch(path).then(res => res.json() as Promise<GetChatsResponse | ApiError>);
@@ -256,6 +257,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const onInput: FormEventHandler<HTMLInputElement> = (event) => {
         const value = event.currentTarget.value;
         setShowLabel(!value.length);
+        setSearchQuery(value); // update search query
     };
 
     // Handle bulk delete
@@ -407,6 +409,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }
     }, []);
 
+    // Filter chats by search query (case-insensitive, label only)
+    const filteredChats = searchQuery.trim().length > 0
+        ? localChats.chats.filter(chat =>
+            (chat.label ?? "New Chat").toLowerCase().includes(searchQuery.trim().toLowerCase())
+        )
+        : localChats.chats;
+
     return (
         <>
             <style>{`
@@ -534,7 +543,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 style={{ top: `var(--top-pos, 0px)` }}
                             />
                         )} 
-                        {localChats.chats.map((chat, idx) => {
+                        {filteredChats.map((chat, idx) => {
                             const isSelected = selectedChatIds.has(chat.id);
                             const isDeleting = deletingId === chat.id;
                             const isLongPressing = longPressActive === chat.id;
@@ -738,7 +747,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
                                                     <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
                                                     <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
-                                                </svg>
+                                            </svg>
                                             </span>
                                             <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? 'scale(1)' : 'scale(0)', zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
                                                 {/* Checkmark SVG */}
@@ -756,9 +765,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 <span>Loading more...</span>
                             </li>
                         )}
-                        {!localChats.chats.length && !isLoading && !loadingMore && (
+                        {!filteredChats.length && !isLoading && !loadingMore && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
-                                <span>You have no chats! Create one by typing anything in the main tab!</span>
+                                <span>No chats found.</span>
                             </li>
                         )}
                         {isLoading && !loadingMore && (

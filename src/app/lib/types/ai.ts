@@ -538,3 +538,161 @@ export class AnthropicChat implements Chat {
         return AnthropicChat.getCapabilities().find(c => c.model === this.model);
     }
 }
+
+export class OpenRouterChat implements Chat {
+    model: string;
+    provider: string = "openrouter";
+    label?: string;
+    systemPrompt?: string;
+    private history: Message[] = [];
+    private openai: OpenAI;
+
+    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
+        this.model = model;
+        this.history = history;
+        this.systemPrompt = systemPrompt;
+        this.openai = new OpenAI({
+            apiKey: apiKey || process.env.OPENROUTER_API_KEY,
+            baseURL: "https://openrouter.ai/api/v1"
+        });
+        if (!apiKey && !process.env.OPENROUTER_API_KEY) {
+            throw new Error("OPENROUTER_API_KEY environment variable is required");
+        }
+    }
+
+    private mapRole(role?: "user" | "model"): "user" | "assistant" {
+        if (role === "model") return "assistant";
+        return "user";
+    }
+
+    private convertPartsToOpenAIContent(parts: { text?: string; inlineData?: { mimeType: string; data: string } }[]) {
+        const content: any[] = [];
+        for (const part of parts) {
+            if (part.text) {
+                content.push({
+                    type: "text",
+                    text: part.text
+                });
+            } else if (part.inlineData) {
+                if (part.inlineData.mimeType.startsWith('image/')) {
+                    content.push({
+                        type: "image_url",
+                        image_url: {
+                            url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+                        }
+                    });
+                }
+            }
+        }
+        return content.length > 0 ? content : [{ type: "text", text: "" }];
+    }
+
+    async sendStream(message: Message): Promise<ReadableStream> {
+        if (!message.parts[0] && (!message.attachments || message.attachments.length === 0)) {
+            throw "at least one part or attachment is required";
+        }
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+            ...this.history.map((msg) => ({
+                role: this.mapRole(msg.role),
+                content: this.convertPartsToOpenAIContent(msg.parts)
+            })), {
+                role: this.mapRole(message.role),
+                content: this.convertPartsToOpenAIContent(message.parts)
+            }
+        ];
+        if (this.systemPrompt) {
+            messages.push({
+                role: "system",
+                content: this.systemPrompt
+            });
+        }
+        const stream = await this.openai.chat.completions.create({
+            model: this.model,
+            messages,
+            stream: true
+        });
+        const that = this;
+        const readable = new ReadableStream({
+            async start(controller) {
+                let fullResponse = "";
+                try {
+                    for await (const chunk of stream) {
+                        const text = chunk.choices?.[0]?.delta?.content || "";
+                        fullResponse += text;
+                        controller.enqueue(new TextEncoder().encode(text));
+                    }
+                    that.history.push({
+                        role: "model",
+                        parts: [{ text: fullResponse }],
+                    });
+                    controller.close();
+                } catch (error) {
+                    controller.error(error);
+                }
+            }
+        });
+        return readable;
+    }
+
+    async send(message: Message): Promise<string> {
+        const messages = [
+            ...this.history.map((msg) => ({
+                role: this.mapRole(msg.role),
+                content: this.convertPartsToOpenAIContent(msg.parts)
+            })),
+            {
+                role: this.mapRole(message.role),
+                content: this.convertPartsToOpenAIContent(message.parts)
+            }
+        ];
+        const response = await this.openai.chat.completions.create({
+            model: this.model,
+            messages
+        });
+        const text = response.choices?.[0]?.message?.content || "";
+        this.history.push({
+            role: "model",
+            parts: [{ text }],
+        });
+        return text;
+    }
+
+    getHistory(): Message[] {
+        return this.history.map((msg) => ({
+            role: msg.role,
+            parts: msg.parts,
+            attachments: msg.attachments,
+        } as Message));
+    }
+
+    static getCapabilities(): ModelCapabilities[] {
+        // Example models, update as needed
+        return [
+            {
+                model: "openrouter/openai/gpt-3.5-turbo",
+                name: "OpenRouter GPT-3.5 Turbo",
+                provider: "openrouter",
+                supportsAttachments: true,
+                supportsImages: true,
+                supportsStreaming: true,
+                description: "OpenRouter GPT-3.5 Turbo via OpenRouter API."
+            },
+            {
+                model: "openrouter/openai/gpt-4-turbo",
+                name: "OpenRouter GPT-4 Turbo",
+                provider: "openrouter",
+                supportsAttachments: true,
+                supportsImages: true,
+                supportsStreaming: true,
+                description: "OpenRouter GPT-4 Turbo via OpenRouter API."
+            }
+        ];
+    }
+    getCapabilities(): ModelCapabilities[] {
+        return OpenRouterChat.getCapabilities();
+    }
+
+    getCurrentModelCapabilities(): ModelCapabilities | undefined {
+        return OpenRouterChat.getCapabilities().find(c => c.model === this.model);
+    }
+}

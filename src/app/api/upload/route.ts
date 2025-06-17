@@ -4,6 +4,7 @@ import { join } from "path";
 import { mkdir } from "fs/promises";
 import { currentUser } from "@clerk/nextjs/server";
 import redis, { GET_LOOKUP_KEY, USER_FILES_KEY } from "@/app/lib/redis";
+import { byokAvailable } from "@/app/lib/utils/byok";
 
 // Ensure uploads directory exists in public folder
 const uploadsDir = join(process.cwd(), "public", "uploads");
@@ -15,14 +16,8 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const requireByok = process.env.REQUIRE_BYOK === "true";
-    if (requireByok) {
-        if (user && user.privateMetadata?.team !== true) {
-            const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
-            if (!byok.openaiKey && !byok.anthropicKey && !byok.geminiKey) {
-                return NextResponse.json({ error: "BYOK keys are required" }, { status: 403 });
-            }
-        }
+    if (!byokAvailable(user)) {
+        return NextResponse.json({ error: "BYOK keys are required" }, { status: 403 });
     }
 
     let filepath: string | null = null;
@@ -125,8 +120,8 @@ export async function DELETE(req: NextRequest) {
     }
     const filePath = join(uploadsDir, randomName);
     try {
-        await unlink(filePath).catch(() => {});
-        await unlink(filePath + ".meta.json").catch(() => {});
+        await unlink(filePath).catch(() => { });
+        await unlink(filePath + ".meta.json").catch(() => { });
         await redis.del(lookupKey);
         await redis.hdel(USER_FILES_KEY(user.id), randomName);
         return NextResponse.json({ success: true });

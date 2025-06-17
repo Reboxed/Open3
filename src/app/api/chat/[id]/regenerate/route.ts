@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import redis, { CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_CHATS_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
 import { Message } from "@/app/lib/types/ai";

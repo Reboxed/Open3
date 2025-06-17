@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState, useRef, FormEventHandler } from "react";
 import { URLSearchParams } from "url";
+import Dropdown from "./Dropdown";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
 type ChatInputProps = {
@@ -64,8 +65,12 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
     // Fetch model capabilities
     useEffect(() => {
         if (isModelFixed) {
+            if ((!model || !provider) && initialModel && initialProvider) {
+                setModel(initialModel);
+                setProvider(initialProvider);
+                onModelChange?.(initialModel, initialProvider);
+            }
             if (!model || !provider) return;
-            // Only fetch/filter the selected model's capabilities
             fetch(`/api/models?model=${encodeURIComponent(model)}&provider=${encodeURIComponent(provider)}`)
                 .then(res => res.json())
                 .then((filtered: ModelCapabilities[]) => {
@@ -191,21 +196,27 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
                         <div className="flex gap-3 items-stretch">
                             {/* Only render dropdown if modelCapabilities are loaded and model is not fixed */}
                             {!isModelFixed && modelCapabilities.length > 0 && (
-                                <select className="cursor-pointer text-neutral-50/65" value={model ?? ""} onChange={e => {
-                                    const value = e.target.value;
-                                    setModel(value);
-                                    const cap = modelCapabilities.find(m => m.name === value || m.model === value);
-                                    const prov = cap?.provider || "google";
-                                    setProvider(prov);
-                                    onModelChange?.(value, prov);
-                                }}>
-                                    {modelCapabilities.map(m => (
-                                        <option key={m.model} value={m.model}>
-                                            {m.name}
-                                            {m.supportsAttachments && " - Attachments "}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Dropdown
+                                    label=""
+                                    options={{
+                                        disableLabelsOnElements: true,
+                                    }}
+                                    className="mr-3"
+                                    items={modelCapabilities.map(m => ({
+                                        name: m.name/*  + (m.supportsAttachments ? " - Attachments" : "") */,
+                                        value: m.model,
+                                        disabled: false,
+                                        default: m.model === model,
+                                    }))}
+                                    name="model"
+                                    onChange={option => {
+                                        setModel(option.value);
+                                        const cap = modelCapabilities.find(m => m.name === option.name.split(" - ")[0] || m.model === option.value);
+                                        const prov = cap?.provider || "google";
+                                        setProvider(prov);
+                                        onModelChange?.(option.value, prov);
+                                    }}
+                                />
                             )}
                             {showAttachmentButton && (
                                 <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
