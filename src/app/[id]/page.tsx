@@ -95,12 +95,23 @@ export default function Chat() {
             if (!messagesElement) return;
             const currentScrollY = window.scrollY;
             const scrollPosition = currentScrollY + window.innerHeight;
-            const bottomThreshold = messagesElement.scrollHeight - 100;
+            const bottomThreshold = messagesElement.scrollHeight - 35;
 
             if (currentScrollY < lastScrollY) {
                 setAutoScroll(false);
             } else if (currentScrollY > lastScrollY) {
                 if (scrollPosition >= bottomThreshold) {
+                    const messagesElement = messagesRef.current;
+                    if (messagesElement) {
+                        programmaticScrollRef.current = true;
+                        window.scrollTo({
+                            behavior: "instant",
+                            top: messagesElement.scrollHeight,
+                        });
+                        setTimeout(() => {
+                            programmaticScrollRef.current = false;
+                        }, 100);
+                    }
                     setAutoScroll(true);
                 }
             }
@@ -121,21 +132,6 @@ export default function Chat() {
 
     function handleStopAutoScroll() {
         setAutoScroll(false);
-    }
-
-    function handleScrollToBottom() {
-        const messagesElement = messagesRef.current;
-        if (messagesElement) {
-            programmaticScrollRef.current = true;
-            window.scrollTo({
-                behavior: "smooth",
-                top: messagesElement.scrollHeight,
-            });
-            setTimeout(() => {
-                programmaticScrollRef.current = false;
-            }, 100);
-            setAutoScroll(true);
-        }
     }
 
     function onSend(message: string, attachments: { url: string; filename: string }[] = []) {
@@ -178,6 +174,52 @@ export default function Chat() {
         });
     }
 
+    async function handleDeleteMessage(idx: number) {
+        if (idx === 0) {
+            // Delete the entire chat if the first message is deleted
+            await fetch(`/api/chat/${tabId}`, { method: "DELETE" });
+            // Redirect to home or another page after deletion
+            window.location.href = "/";
+            return;
+        }
+        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
+        setMessages(messages.slice(0, idx));
+    }
+
+    // Regenerate handler for LLM responses
+    const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
+    const handleRegenerate = useCallback(async (idx: number) => {
+        setRegeneratingIdx(idx);
+        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
+
+        const prevUserMsg = messages[idx - 1];
+        if (!prevUserMsg || prevUserMsg.role !== "user") {
+            setRegeneratingIdx(null);
+            return;
+        }
+
+        const eventSource = new EventSource(`/api/chat/${tabId}/regenerate?fromIndex=${idx}`);
+        let assistantMessage = "";
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            assistantMessage += data.candidates[0].content.parts[0].text;
+            setMessages(prev => {
+                const newMessages = prev.slice(0, idx);
+                return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
+            });
+        };
+        eventSource.onerror = () => {
+            eventSource.close();
+            setRegeneratingIdx(null);
+            loadMessagesFromServer(tabId).then((r) => setMessages(r.messages));
+        };
+        eventSource.addEventListener("done", () => {
+            eventSource.close();
+            setRegeneratingIdx(null);
+            loadMessagesFromServer(tabId).then((r) => setMessages(r.messages));
+        });
+    }, [messages, tabId]);
+
     return (
         <>
             {generating && autoScroll && (
@@ -193,18 +235,41 @@ export default function Chat() {
                 </button>
             )}
             <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
-                <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-4 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
+                <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-2 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
                     <div ref={topSentinelRef} style={{ height: 1 }} />
                     {!messagesLoading && (
                         <>
                             {messages.map((message, idx) => (
-                                <MessageBubble key={`${message.role}-${idx}`} message={message} />
+                                <MessageBubble
+                                    key={`${message.role}-${idx}`}
+                                    message={message}
+                                    index={idx}
+                                    onDelete={handleDeleteMessage}
+                                    onRegenerate={handleRegenerate}
+                                    regeneratingIdx={regeneratingIdx}
+                                />
                             ))}
                         </>
                     )}
                     {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
-                        <div className="col-span-2 flex justify-start items-start py-8">
-                            <span className="text-neutral-400">...</span>
+                        <div className="col-span-2 flex justify-start items-start py-8 group relative">
+                            <span className="flex gap-1">
+                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                            </span>
+                            <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 bg-neutral-800 text-white text-xs rounded px-3 py-2 shadow-lg z-10 w-max max-w-xs">
+                                Why is this showing? Latency, reasoning and uploading files
+                            </div>
+                            <style jsx>{`
+                                @keyframes bounce {
+                                    0%, 80%, 100% { transform: translateY(0); }
+                                    40% { transform: translateY(-8px); }
+                                }
+                                .animate-bounce {
+                                    animation: bounce 1s infinite;
+                                }
+                            `}</style>
                         </div>
                     )}
                 </div>
@@ -225,23 +290,18 @@ export default function Chat() {
     );
 }
 
-const MessageBubble = ({ message }: { message: Message }) => {
+const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, onDelete?: (idx: number) => void, onRegenerate?: (idx: number) => void, regeneratingIdx?: number | null }) => {
     const isUser = message.role === "user";
     const className = isUser
-        ? "px-6 py-4 rounded-2xl bg-white/[0.06] mb-2 justify-self-end"
-        : "p-2 mb-2";
+        ? "px-6 py-4 rounded-2xl mb-1 bg-white/[0.06] justify-self-end"
+        : "p-2 mb-1";
 
-    // Get chatId from params for attachment URLs
-    const params = useParams();
-    const chatId = params.id?.toString() ?? "";
-
-    // Memoize Markdown rendering for performance
     const renderedMarkdown = useMemo(() => {
         // Only apply syntax highlighting for model messages
         const rehypePlugins = isUser
             ? [rehypeRaw, [rehypeClassAll, { className: "md" }]]
             : [rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]];
-        // Flatten plugins array for react-markdown
+
         return (
             <Markdown
                 skipHtml={isUser}
@@ -254,6 +314,42 @@ const MessageBubble = ({ message }: { message: Message }) => {
         );
     }, [isUser, message.parts]);
 
+    // Trash icon fade in/out on hover (only for user messages)
+    const [hovered, setHovered] = useState(false);
+    const [pendingDelete, setPendingDelete] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const deleteTimeout = useRef<NodeJS.Timeout | null>(null);
+    const copyTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Reset pendingDelete if mouse leaves
+    useEffect(() => {
+        if (!hovered && pendingDelete) {
+            deleteTimeout.current = setTimeout(() => setPendingDelete(false), 2000);
+        } else if (hovered && deleteTimeout.current) {
+            clearTimeout(deleteTimeout.current);
+            deleteTimeout.current = null;
+        }
+    }, [hovered, pendingDelete]);
+
+    // Clean up timeouts on unmount
+    useEffect(() => () => {
+        if (deleteTimeout.current) clearTimeout(deleteTimeout.current);
+        if (copyTimeout.current) clearTimeout(copyTimeout.current);
+    }, []);
+
+    // Copy message handler
+    const handleCopy = async () => {
+        if (copied) return;
+        const text = message.parts[0]?.text ?? "";
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            copyTimeout.current = setTimeout(() => setCopied(false), 3000);
+        } catch { }
+    };
+
+    const params = useParams();
+    const chatId = params.id?.toString() ?? "";
     const AttachmentPreview = ({ att, chatId }: { att: { url: string; filename: string }, chatId: string }) => {
         const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
         const [imgSrc, setImgSrc] = React.useState(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
@@ -279,11 +375,14 @@ const MessageBubble = ({ message }: { message: Message }) => {
     };
 
     return (
-        <div className={`${isUser ? "justify-self-end col-start-2 " : "justify-self-start col-span-2"} max-w-full`}>
+        <div
+            className={`${isUser ? "justify-self-end col-start-2 " : "justify-self-start col-span-2"} max-w-full relative`}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+        >
             <div className={`${className} max-w-full min-w-0`}>
                 {renderedMarkdown}
             </div>
-
             {message.attachments && message.attachments.length > 0 && (
                 <div className="relative flex flex-wrap gap-2 mt-3 justify-self-end">
                     {message.attachments.map(att => (
@@ -291,8 +390,76 @@ const MessageBubble = ({ message }: { message: Message }) => {
                     ))}
                 </div>
             )}
+            <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                {/* Copy button for all messages */}
+                <button
+                    aria-label={copied ? "Copied!" : "Copy message"}
+                    onClick={handleCopy}
+                    className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${copied ? "text-neutral-50" : ""}`}
+                    style={{ opacity: hovered || copied ? 1 : 0, pointerEvents: hovered || copied ? 'auto' : 'none', width: 36, height: 36 }}
+                >
+                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copied ? 'scale(0)' : 'scale(1)', zIndex: copied ? 0 : 1 }}>
+                        {/* Copy SVG */}
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
+                            <rect x="6" y="6" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                            <rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                    </span>
+                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copied ? 'scale(1)' : 'scale(0)', zIndex: copied ? 1 : 0 }}>
+                        {/* Checkmark SVG */}
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="currentColor" strokeWidth="2.5" />
+                        </svg>
+                    </span>
+                </button>
+                {message.role === "model" && onRegenerate && (
+                    <button
+                        aria-label="Regenerate response"
+                        onClick={() => onRegenerate(index)}
+                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${regeneratingIdx === index ? "animate-spin" : ""}`}
+                        style={{ opacity: hovered || regeneratingIdx === index ? 1 : 0, pointerEvents: hovered || regeneratingIdx === index ? 'auto' : 'none', width: 36, height: 36 }}
+                        disabled={regeneratingIdx === index}
+                    >
+                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: 'scale(1)', zIndex: 1 }}>
+                            {/* Regenerate SVG */}
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M15.1425 1.97778L15.0644 7.62329L9.41692 7.677L9.40032 5.927L12.7685 5.89575C11.101 4.3035 8.48511 4.07555 6.55071 5.47583C4.37106 7.05408 3.88366 10.1008 5.46184 12.2805C7.04012 14.4599 10.086 14.9473 12.2656 13.3694C12.8709 12.931 13.3441 12.3809 13.6796 11.7688L15.2148 12.6096C14.7572 13.4445 14.1118 14.1926 13.2919 14.7864C10.3295 16.9314 6.18904 16.2691 4.04387 13.3069C1.89907 10.3444 2.56195 6.20387 5.52434 4.05884C7.92652 2.31966 11.1029 2.42655 13.3622 4.10864L13.3925 1.95435L15.1425 1.97778Z" fill="currentColor" />
+                            </svg>
+                        </span>
+                    </button>
+                )}
+                {/* Delete button for user messages only */}
+                {isUser && onDelete && (
+                    <button
+                        aria-label={pendingDelete ? "Confirm delete message" : "Delete message"}
+                        onClick={() => {
+                            if (!pendingDelete) {
+                                setPendingDelete(true);
+                            } else {
+                                setPendingDelete(false);
+                                onDelete(index);
+                            }
+                        }}
+                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${pendingDelete ? "!text-red-500" : ""}`}
+                        style={{ opacity: hovered || pendingDelete ? 1 : 0, pointerEvents: hovered || pendingDelete ? 'auto' : 'none', width: 36, height: 36 }}
+                    >
+                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDelete ? 'scale(0)' : 'scale(1)', zIndex: pendingDelete ? 0 : 1 }}>
+                            {/* Trash SVG */}
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
+                                <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="currentColor" />
+                                <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="currentColor" />
+                            </svg>
+                        </span>
+                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDelete ? 'scale(1)' : 'scale(0)', zIndex: pendingDelete ? 1 : 0 }}>
+                            {/* Checkmark SVG */}
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="currentColor" strokeWidth="2.5" />
+                            </svg>
+                        </span>
+                    </button>
+                )}
+            </div>
         </div>
     );
-};
-MessageBubble.displayName = "MessageBubble";
+}
 

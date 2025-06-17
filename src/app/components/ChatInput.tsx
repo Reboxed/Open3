@@ -174,7 +174,7 @@ export default function ChatInput({ onSend, className, loading }: ChatInputProps
                     </div>
                 </div>
             </form>
-            <div className={`w-full p-6 rounded-b-3xl flex gap-6 overflow-x-auto overflow-y-hidden ${enableAttachments ? "translate-0 opacity-100 h-fit" : "-translate-y-full h-0 absolute opacity-0"} transition-all duration-250`}>
+            <div className={`w-full p-6 rounded-b-3xl flex gap-6 overflow-x-auto overflow-y-hidden ${enableAttachments ? "translate-0 opacity-100 h-fit" : "-translate-y-full h-0 absolute opacity-0 pointer-events-none"} transition-all duration-250`}>
                 <input
                     ref={fileInputRef}
                     type="file"
