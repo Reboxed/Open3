@@ -1,4 +1,4 @@
-import { Content, GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { OpenAI } from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -112,6 +112,7 @@ export class GeminiChat implements Chat {
     }
 
     static getCapabilities(): ModelCapabilities[] {
+        // Hard coded for now will be changed later
         return [
             {
                 model: "gemini-1.5-flash-latest",
@@ -270,6 +271,7 @@ export class OpenAIChat implements Chat {
     }
 
     static getCapabilities(): ModelCapabilities[] {
+        // Hard coded for now will be changed later
         return [
             {
                 model: "gpt-4.1-nano",
@@ -446,34 +448,62 @@ export class AnthropicChat implements Chat {
     }
 
     static getCapabilities(): ModelCapabilities[] {
+        // Hard coded for now, will be changed later
         return [
             {
                 model: "claude-3-opus-20240229",
-                name: "Claude 3 Opus",
+                name: "Claude Opus 3",
                 provider: "anthropic",
                 supportsAttachments: true,
                 supportsImages: true,
                 supportsStreaming: true,
-                description: "Anthropic Claude 3 Opus, advanced reasoning and long context. Supports image uploads."
+                description: "Anthropic Claude 3 Opus"
             },
             {
                 model: "claude-3-sonnet-20240229",
-                name: "Claude 3 Sonnet",
+                name: "Claude Sonnet 3",
                 provider: "anthropic",
                 supportsAttachments: true,
                 supportsImages: true,
                 supportsStreaming: true,
-                description: "Anthropic Claude 3 Sonnet, fast and capable. Supports image uploads."
+                description: "Anthropic Claude 3 Sonnet"
             },
             {
                 model: "claude-3-5-sonnet-20241022",
-                name: "Claude 3.5 Sonnet",
+                name: "Claude Sonnet 3.5",
                 provider: "anthropic",
                 supportsAttachments: true,
                 supportsImages: true,
                 supportsStreaming: true,
-                description: "Anthropic Claude 3.5 Sonnet, latest and most capable model. Supports image uploads."
-            }
+                description: "Anthropic Claude 3.5 Sonnet"
+            },
+            {
+                model: "claude-3-5-haiku-20241022",
+                name: "Claude Haiku 3.5",
+                provider: "anthropic",
+                supportsAttachments: true,
+                supportsImages: true,
+                supportsStreaming: true,
+                description: "Anthropic Claude 3.5 Haiku"
+            },
+            {
+                model: "claude-opus-4-20250514",
+                name: "Claude Opus 4",
+                provider: "anthropic",
+                supportsAttachments: true,
+                supportsImages: true,
+                supportsStreaming: true,
+                description: "Anthropic Claude Opus 4"
+            },
+            {
+                model: "claude-sonnet-4-20250514",
+                name: "Claude Sonnet 4",
+                provider: "anthropic",
+                supportsAttachments: true,
+                supportsImages: true,
+                supportsStreaming: true,
+                description: "Anthropic Claude Sonnet 4"
+            },
         ];
     }
     getCapabilities(): ModelCapabilities[] {
