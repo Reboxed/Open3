@@ -25,7 +25,7 @@ export default function Home() {
     const router = useRouter();
 
     useEffect(() => {
-        fetch("/api/byok-required").then(res => res.json()).then(data => {
+        fetch("/api/byok/required").then(res => res.json()).then(data => {
             setByokRequired(data.required);
             if (data.required) {
                 window.location.href = "/settings";

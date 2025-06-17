@@ -1,3 +1,5 @@
+// TODO: Merge the regenerate and send routes files
+
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY } from "@/app/lib/redis";
@@ -105,10 +107,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }, { status: 500 });
     }
 
+    // Get user and API keys and check authorization
     const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    // Extract chat ID and prompt from request parameters
     const { id } = await params;
     const searchParams = req.nextUrl.searchParams;
     const prompt = searchParams.get('prompt');
@@ -116,9 +120,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
+    // Get model information
     const requestedModel = searchParams.get('model');
     const requestedProvider = searchParams.get('provider');
 
+    // Get attachments from query params
     const attachmentsParam = searchParams.get('attachments');
     const attachments = attachmentsParam ? JSON.parse(attachmentsParam) : [];
 
@@ -165,7 +171,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     let chat;
     try {
-        // Pass apiKey to getChatClass
+        // Instantiate the chat class based on provider and model
         chat = getChatClass(chatProvider, chatModel, existingMessages, undefined, apiKey);
     } catch (e) {
         return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
@@ -239,7 +245,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                             try {
                                 fullResponse += chunkText.slice(6).trim();
                             } catch (e) {
-                                // Ignore JSON parse errors for streaming data
+                                // Idk what would trigger this, but just in case
+                                console.error("Failed to parse chunk text:", e);
                             }
                         }
 
@@ -283,6 +290,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         console.error("Error during chat generation:", error);
         return NextResponse.json({ error: 'Failed to generate content', details: (error as Error).message }, { status: 500 });
     } finally {
+        // Ensure generating state is cleared even if an error occurs
         await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {
             // This shouldn't hopefully happen or else i will shoot myself
             console.error(err);

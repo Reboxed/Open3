@@ -275,7 +275,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
 
         setTimeout(async () => {
             try {
-                const result = await fetch('/api/chat/bulk-delete', {
+                const result = await fetch('/api/chat/bulk', {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ chatIds: chatIdsToDelete })
