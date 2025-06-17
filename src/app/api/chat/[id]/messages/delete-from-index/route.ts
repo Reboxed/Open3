@@ -7,13 +7,13 @@ import { unlink, stat } from "fs/promises";
 
 const uploadsDir = join(process.cwd(), "public", "uploads");
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
         return NextResponse.json({ error: "Redis connection failure" }, { status: 500 });
     }
     const user = await auth();
     if (!user || !user.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { id } = params;
+    const { id } = await params;
     const url = new URL(req.url);
     const fromIndex = parseInt(url.searchParams.get("fromIndex") || "-1", 10);
     if (isNaN(fromIndex) || fromIndex < 0) {

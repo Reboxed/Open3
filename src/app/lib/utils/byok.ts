@@ -9,7 +9,7 @@ export async function getUserApiKeys() {
         // anthropicKey: process.env.ANTHROPIC_API_KEY,
         // geminiKey: process.env.GOOGLE_GEN_AI_API_KEY,
         openrouterKey: process.env.OPENROUTER_API_KEY,
-    }, user };
+    } as Record<string, string>, user };
     const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
     return { requireByok, byok, user };
 }

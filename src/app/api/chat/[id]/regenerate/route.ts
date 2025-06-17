@@ -5,14 +5,14 @@ import { Message } from "@/app/lib/types/ai";
 import { getChatClass } from "@/app/lib/utils/getChatClass";
 import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
         return new Response(JSON.stringify({ error: "Redis connection failure" }), { status: 500 });
     }
     const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     if (user.banned) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    const { id } = params;
+    const { id } = await params;
     const url = new URL(req.url);
     const fromIndex = parseInt(url.searchParams.get("fromIndex") || "-1", 10);
     const prompt = url.searchParams.get("prompt") || "";
