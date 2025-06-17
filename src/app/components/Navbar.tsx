@@ -34,13 +34,13 @@ export function Navbar() {
 
         const results = await Promise.all(promises);
         const newApiTitles = new Map(apiTitles);
-        
+
         results.forEach(result => {
             if (result) {
                 newApiTitles.set(result.id, result.title);
             }
         });
-        
+
         setApiTitles(newApiTitles);
     }, [apiTitles]);
 
@@ -48,13 +48,13 @@ export function Navbar() {
     const getTabTitle = useCallback((tab: Tab): string => {
         if (tab.permanent) return tab.label ?? "Open3";
         if (!tab.id) return tab.label ?? "New Chat";
-        
+
         // Streaming title takes precedence over API title
         const streamingTitle = streamingTitles.get(tab.id);
         if (streamingTitle !== undefined) {
             return streamingTitle || "Generating title...";
         }
-        
+
         const apiTitle = apiTitles.get(tab.id);
         return apiTitle || tab.label || "New Chat";
     }, [streamingTitles, apiTitles]);
@@ -98,7 +98,7 @@ export function Navbar() {
                 .filter(tab => !tab.permanent && tab.id && !streamingTitles.has(tab.id))
                 .map(tab => tab.id!)
                 .filter(id => !apiTitles.has(id));
-            
+
             if (chatIds.length > 0) {
                 fetchTitles(chatIds);
             }
@@ -108,6 +108,7 @@ export function Navbar() {
     // Single effect to sync tabs and clean up deleted ones
     useEffect(() => {
         const lsTabs = getTabs(localStorage);
+        if (pathname === "/settings") return;
         let activeFound = false;
         for (let i = 0; i < lsTabs.length; i++) {
             lsTabs[i].active = lsTabs[i].link == pathname;
@@ -145,6 +146,7 @@ export function Navbar() {
         return () => window.removeEventListener('chatTitleUpdate', handleTitleUpdate as EventListener);
     }, []);
 
+    // Add settings button for BYOK
     return (
         <>
             <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
@@ -185,7 +187,7 @@ export function Navbar() {
                             setTabsS(localStorage, lsTabs);
                         }}
                     />
-                    <div className="h-full w-fit ml-auto">
+                    <div className="h-full w-fit ml-auto flex items-center gap-2">
                         <UserComponent />
                     </div>
                 </div>
@@ -196,6 +198,10 @@ export function Navbar() {
 }
 
 function UserComponent() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const isSettingsPage = pathname.startsWith("/settings");
+
     return (
         <>
             <SignedOut>
@@ -203,7 +209,14 @@ function UserComponent() {
                 <SignUpButton />
             </SignedOut>
             <SignedIn>
-                <div className="pt-1 min-w-[68px]">
+                <div className="pb-2.5 min-w-[68px] flex justify-center items-center gap-4">
+                    <button
+                        className={`h-9 w-9 ${!isSettingsPage ? "bg-black/15 shadow-inactive-button" : "bg-primary shadow-active-button"} rounded-xl cursor-pointer transition-all duration-200`}
+                        title="Settings / API Keys"
+                        onClick={() => router.push("/settings")}
+                    >
+                        <span role="img" aria-label="settings">⚙️</span>
+                    </button>
                     <UserButton appearance={{
                         baseTheme: dark,
                         elements: {

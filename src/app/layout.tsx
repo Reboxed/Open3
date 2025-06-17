@@ -5,6 +5,9 @@ import {
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
+import { redirect } from "next/navigation";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -26,6 +29,32 @@ export default async function RootLayout({
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    // Require login with Clerk
+    // const user = await auth();
+    // if (!user?.userId) {
+    //     redirect("/sign-in");
+    // }
+    // BYOK enforcement logic
+    // const requireByok = process.env.REQUIRE_BYOK === "true";
+    // let needsByok = false;
+    // if (requireByok) {
+    //     const current = await currentUser();
+    //     if (current && current.privateMetadata?.team !== true) {
+    //         const byok = (current.privateMetadata?.byok as Record<string, string>) || {};
+    //         if (!byok.openaiKey && !byok.anthropicKey && !byok.geminiKey) {
+    //             needsByok = true;
+    //         }
+    //     }
+    // }
+    // // Prevent infinite redirect loop on /settings
+    // if (needsByok) {
+    //     const h = await headers();
+    //     const pathname = h.get("x-pathname") || "";
+    //     if (!pathname.startsWith("/settings")) {
+    //         redirect("/settings");
+    //     }
+    // }
+
     return (
         <html lang="en">
             <ClerkProvider>

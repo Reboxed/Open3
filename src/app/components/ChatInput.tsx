@@ -12,8 +12,9 @@ type ChatInputProps = {
     onSend?: (message: string, attachments: { url: string; filename: string }[], model: string, provider: string) => OptionalReturn<string>;
     className?: string;
     loading?: boolean;
-    model?: string;
-    provider?: string;
+    model?: string | null | undefined;
+    provider?: string | null | undefined;
+    isModelFixed?: boolean;
     onModelChange?: (model: string, provider: string) => void;
 };
 
@@ -40,7 +41,7 @@ interface ModelCapabilities {
     description?: string;
 }
 
-export default function ChatInput({ onSend, className, loading, model: initialModel = "Gemini 2.5 Flash", provider: initialProvider = "google", onModelChange }: ChatInputProps) {
+export default function ChatInput({ onSend, className, loading, isModelFixed = false, model: initialModel, provider: initialProvider, onModelChange }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
     const [inputValue, setInputValue] = useState("");
@@ -60,17 +61,45 @@ export default function ChatInput({ onSend, className, loading, model: initialMo
         label.hidden = inputValue.trim() != "" || inputValue.trim().split("\n").length > 2;
     }, [inputValue])
 
-    // Fetch model capabilities on mount
+    // Fetch model capabilities
     useEffect(() => {
-        fetch("/api/models")
-            .then(res => res.json())
-            .then(setModelCapabilities)
-            .catch(() => setModelCapabilities([]));
-    }, []);
+        if (isModelFixed) {
+            if (!model || !provider) return;
+            // Only fetch/filter the selected model's capabilities
+            fetch(`/api/models?model=${encodeURIComponent(model)}&provider=${encodeURIComponent(provider)}`)
+                .then(res => res.json())
+                .then((filtered: ModelCapabilities[]) => {
+                    setModelCapabilities(filtered);
+                })
+                .catch(() => {
+                    setModelCapabilities([]);
+                });
+        } else {
+            fetch("/api/models")
+                .then(res => res.json())
+                .then((allCaps: ModelCapabilities[]) => {
+                    setModelCapabilities(allCaps);
+                })
+                .catch(() => {
+                    setModelCapabilities([]);
+                });
+        }
+    }, [isModelFixed, model, provider, initialModel, initialProvider]);
+
+    // Set initial model and provider after fetching capabilities
+    useEffect(() => {
+        if (modelCapabilities.length > 0 && !isModelFixed) {
+            const found = modelCapabilities.find(m => m.name === model || m.model === model);
+            if (!found) {
+                setModel(modelCapabilities[0].model);
+                setProvider(modelCapabilities[0].provider);
+                onModelChange?.(modelCapabilities[0].model, modelCapabilities[0].provider);
+            }
+        }
+    }, [modelCapabilities, model, onModelChange, isModelFixed]);
 
     // Find the selected model's capabilities
-    const selectedModel = modelCapabilities.find(m => m.name === model || m.model === model);
-    console.log("Model capabilities fetched:", selectedModel);
+    const selectedModel = modelCapabilities.find(m => m.name === model || m.model === model) || modelCapabilities[0];
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -111,6 +140,7 @@ export default function ChatInput({ onSend, className, loading, model: initialMo
         e?.preventDefault();
         if (loading) return;
         if (!inputValue.trim() && attachments.length === 0) return;
+        if (!model || !provider) return;
 
         const newContentRaw = onSend?.(inputValue, attachments, model, provider);
         const newContent = newContentRaw instanceof Promise ? await newContentRaw : newContentRaw;
@@ -159,24 +189,24 @@ export default function ChatInput({ onSend, className, loading, model: initialMo
 
                     <div className="flex justify-between items-stretch gap-5">
                         <div className="flex gap-3 items-stretch">
-                            <select className="cursor-pointer text-neutral-50/65" value={model} onChange={e => {
-                                const value = e.target.value;
-                                setModel(value);
-                                const cap = modelCapabilities.find(m => m.name === value || m.model === value);
-                                const prov = cap?.provider || "google";
-                                setProvider(prov);
-                                onModelChange?.(value, prov);
-                            }}>
-                                {modelCapabilities.map(m => (
-                                    <option key={m.model} value={m.model}>
-                                        {m.name}
-                                        {" - "}
-                                        {m.supportsAttachments && "Attachments - "}
-                                        {m.supportsImages && "Image Gen - "}
-                                        {m.supportsStreaming && "Streaming - "}
-                                    </option>
-                                ))}
-                            </select>
+                            {/* Only render dropdown if modelCapabilities are loaded and model is not fixed */}
+                            {!isModelFixed && modelCapabilities.length > 0 && (
+                                <select className="cursor-pointer text-neutral-50/65" value={model ?? ""} onChange={e => {
+                                    const value = e.target.value;
+                                    setModel(value);
+                                    const cap = modelCapabilities.find(m => m.name === value || m.model === value);
+                                    const prov = cap?.provider || "google";
+                                    setProvider(prov);
+                                    onModelChange?.(value, prov);
+                                }}>
+                                    {modelCapabilities.map(m => (
+                                        <option key={m.model} value={m.model}>
+                                            {m.name}
+                                            {m.supportsAttachments && " - Attachments "}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                             {showAttachmentButton && (
                                 <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
                                     className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}

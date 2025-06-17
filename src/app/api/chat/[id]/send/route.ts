@@ -1,10 +1,11 @@
-import { GeminiChat, OpenAIChat, Message } from "@/app/lib/types/ai";
+import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_FILES_KEY, GET_LOOKUP_KEY } from "@/app/lib/redis";
+import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY } from "@/app/lib/redis";
 import { GetChat } from "../../route";
 import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { join } from "path";
+import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
 import { getChatClass } from "@/app/lib/utils/getChatClass";
 
 // Helper to load file data for an attachment and return parts to inject
@@ -105,7 +106,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }, { status: 500 });
     }
 
-    const user = await currentUser();
+    const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -156,9 +157,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const chatModel = requestedModel || chatJson.model;
     const chatProvider = requestedProvider || chatJson.provider;
+
+    // BYOK enforcement
+    const apiKey = getProviderApiKey(chatProvider, byok);
+    if (requireByok && !apiKey) {
+        return NextResponse.json({ error: `API key required for ${chatProvider}` }, { status: 403 });
+    }
+
     let chat;
     try {
-        chat = getChatClass(chatProvider, chatModel, existingMessages);
+        // Pass apiKey to getChatClass
+        chat = getChatClass(chatProvider, chatModel, existingMessages, undefined, apiKey);
     } catch (e) {
         return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
     }
@@ -253,6 +262,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                     controller.close();
                 } catch (error) {
                     console.error(error);
+                    // Send SSE error event to client before closing
+                    const errorMsg = JSON.stringify({ error: 'stream-failure', message: (error as Error).message });
+                    controller.enqueue(new TextEncoder().encode(`event: error\ndata: ${errorMsg}\n\n`));
                     controller.error(error);
                 } finally {
                     await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {

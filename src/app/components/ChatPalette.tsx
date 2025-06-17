@@ -102,7 +102,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         router.push(`/${chat.id}`);
         setTimeout(() => {
             onDismiss();
-        }, 50); // Delay to allow navigation to start
+        }, 75); // Delay to allow navigation to start
     }
 
     // Keyboard navigation

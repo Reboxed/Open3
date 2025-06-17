@@ -2,13 +2,26 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export default function middleware(req: NextRequest, event: any) {
+export default async function middleware(req: NextRequest, event: any) {
     const url = req.nextUrl;
     // Block direct access to /uploads and its subpaths
     if (url.pathname.startsWith('/uploads')) {
         return new NextResponse('Forbidden', { status: 403 });
     }
-    return clerkMiddleware()(req, event);
+
+    // Run Clerk middleware first
+    const result = await clerkMiddleware(req, event);
+
+    // If Clerk returned a response (redirect, error, etc.), modify it
+    if (result) {
+        result.headers.set("x-pathname", url.pathname);
+        return result;
+    }
+
+    // If no response was returned (middleware falls through), create one
+    const response = NextResponse.next();
+    response.headers.set("x-pathname", url.pathname);
+    return response;
 }
 
 export const config = {

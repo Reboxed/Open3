@@ -15,6 +15,16 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const requireByok = process.env.REQUIRE_BYOK === "true";
+    if (requireByok) {
+        if (user && user.privateMetadata?.team !== true) {
+            const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
+            if (!byok.openaiKey && !byok.anthropicKey && !byok.geminiKey) {
+                return NextResponse.json({ error: "BYOK keys are required" }, { status: 403 });
+            }
+        }
+    }
+
     let filepath: string | null = null;
     let randomName: string | null = null;
     try {

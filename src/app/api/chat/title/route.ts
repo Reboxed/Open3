@@ -6,6 +6,7 @@ import { GoogleGenAI, PartUnion } from "@google/genai";
 import eventBus, { CHAT_TITLE_GENERATE_EVENT } from "@/app/lib/eventBus";
 import { NEW_TITLE_EVENT } from "@/app/lib/constants";
 import { TITLE_PROMPT } from "@/constants";
+import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
 
 
 export async function GET(_: NextRequest) {
@@ -15,9 +16,8 @@ export async function GET(_: NextRequest) {
         }, { status: 500 });
     }
 
-    const user = await auth();
+    const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!user.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
     let eventListener: ((chatId: string, messages: string[]) => Promise<void>) | null = null;
@@ -36,7 +36,7 @@ export async function GET(_: NextRequest) {
                 generatingChats.add(chatId);
 
                 try {
-                    const rawChat = await redis!.hget(USER_CHATS_KEY(user.userId), chatId);
+                    const rawChat = await redis!.hget(USER_CHATS_KEY(user.id), chatId);
                     let chat: GetChat | null = null;
                     
                     try {
@@ -62,8 +62,12 @@ export async function GET(_: NextRequest) {
                         if (!isClosed && controller) {
                             controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${NEW_TITLE_EVENT}\n\n`));
                         }
-                        
-                        const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEN_AI_API_KEY });
+                        // BYOK enforcement for Gemini
+                        const apiKey = getProviderApiKey("google", byok);
+                        if (requireByok && !apiKey) {
+                            throw new Error("API key required for Gemini (Google)");
+                        }
+                        const ai = new GoogleGenAI({ apiKey });
                         const result = await ai.models.generateContentStream({
                             model: "gemini-1.5-flash",
                             config: {
@@ -89,7 +93,7 @@ export async function GET(_: NextRequest) {
 
                         // Save the final title to Redis
                         const finalTitle = fullResponse.trim() || "Untitled Chat";
-                        await redis!.hset(USER_CHATS_KEY(user.userId), chatId, JSON.stringify({
+                        await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                             ...chat,
                             label: finalTitle,
                         } as GetChat));
@@ -99,7 +103,7 @@ export async function GET(_: NextRequest) {
                         // Try to save fallback title
                         try {
                             const fallbackTitle = fullResponse.trim() || "Untitled Chat";
-                            await redis!.hset(USER_CHATS_KEY(user.userId), chatId, JSON.stringify({
+                            await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                                 ...chat,
                                 label: fallbackTitle,
                             } as GetChat));

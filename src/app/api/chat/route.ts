@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     }
 
     const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
+    const endIndex = startIndex + limit - 1;
 
     const chatIds = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), startIndex, endIndex);
     if (chatIds.length === 0) {
@@ -104,6 +104,15 @@ export async function POST(req: NextRequest) {
     const user = await currentUser();
     if (!user) return NextResponse.json([], { status: 401 });
     if (user.banned) return NextResponse.json([], { status: 401 });
+    const requireByok = process.env.REQUIRE_BYOK === "true";
+    if (requireByok) {
+        if (user && user.privateMetadata?.team !== true) {
+            const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
+            if (!byok.openaiKey && !byok.anthropicKey && !byok.geminiKey) {
+                return NextResponse.json({ error: "BYOK keys are required" }, { status: 403 });
+            }
+        }
+    }
 
     const { provider, model } = await req.json() as CreateChatRequest;
     if (!model) {
@@ -112,8 +121,6 @@ export async function POST(req: NextRequest) {
     if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
         return NextResponse.json({ error: 'Provider is required and must be one of: ' + AVAILABLE_PROVIDERS.join(", ") }, { status: 400 });
     }
-
-    console.log(model, provider);
 
     const result = await createChat(user.id, { model, provider });
     return NextResponse.json(result as CreateChatResponse, { status: 201 });

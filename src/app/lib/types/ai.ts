@@ -29,6 +29,7 @@ export interface ModelCapabilities {
 export interface Chat {
     label?: string;
     model: string;
+    systemPrompt?: string;
     provider: string;
     sendStream(message: Message): Promise<ReadableStream>;
     send(message: Message): Promise<string>;
@@ -43,13 +44,15 @@ export class GeminiChat implements Chat {
     model: string;
     provider: string = "google";
     label?: string;
+    systemPrompt?: string;
     private ai: GoogleGenAI;
     private history: Message[] = [];
 
-    constructor(history: Message[], model: string) {
+    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
         this.model = model;
+        this.systemPrompt = systemPrompt;
         this.history = history;
-        this.ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEN_AI_API_KEY })
+        this.ai = new GoogleGenAI({ apiKey: apiKey || process.env.GOOGLE_GEN_AI_API_KEY })
     }
 
     async sendStream(message: Message): Promise<ReadableStream> {
@@ -69,6 +72,9 @@ export class GeminiChat implements Chat {
 
         const result = await chat.sendMessageStream({
             message: messageParts,
+            config: {
+                systemInstruction: this.systemPrompt,
+            }
         });
 
         const that = this;
@@ -115,8 +121,8 @@ export class GeminiChat implements Chat {
         // Hard coded for now will be changed later
         return [
             {
-                model: "gemini-1.5-flash-latest",
-                name: "Gemini 2.5 Flash",
+                model: "gemini-2.0-flash",
+                name: "Gemini 2.0 Flash",
                 provider: "google",
                 supportsAttachments: true,
                 supportsImages: false,
@@ -124,8 +130,17 @@ export class GeminiChat implements Chat {
                 description: "Fast, multimodal Gemini model. Supports file and image attachments."
             },
             {
-                model: "gemini-1.5-pro-latest",
-                name: "Gemini 2 Pro",
+                model: "gemini-1.5-flash",
+                name: "Gemini 1.5 Flash",
+                provider: "google",
+                supportsAttachments: true,
+                supportsImages: false,
+                supportsStreaming: true,
+                description: "Fast, multimodal Gemini model. Supports file and image attachments."
+            },
+            {
+                model: "gemini-1.5-pro",
+                name: "Gemini 1.5 Pro",
                 provider: "google",
                 supportsAttachments: true,
                 supportsImages: false,
@@ -148,14 +163,16 @@ export class OpenAIChat implements Chat {
     model: string;
     provider: string = "openai";
     label?: string;
+    systemPrompt?: string;
     private history: Message[] = [];
     private openai: OpenAI;
 
-    constructor(history: Message[], model: string) {
+    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
         this.model = model;
         this.history = history;
-        this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        if (!process.env.OPENAI_API_KEY) {
+        this.systemPrompt = systemPrompt;
+        this.openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
+        if (!apiKey && !process.env.OPENAI_API_KEY) {
             throw new Error("OPENAI_API_KEY environment variable is required");
         }
     }
@@ -198,16 +215,21 @@ export class OpenAIChat implements Chat {
             throw "at least one part or attachment is required";
         }
 
-        const messages = [
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
             ...this.history.map((msg) => ({
                 role: this.mapRole(msg.role),
                 content: this.convertPartsToOpenAIContent(msg.parts)
-            })),
-            {
+            })), {
                 role: this.mapRole(message.role),
                 content: this.convertPartsToOpenAIContent(message.parts)
             }
         ];
+        if (this.systemPrompt) {
+            messages.push({
+                role: "system",
+                content: this.systemPrompt
+            });
+        }
 
         const stream = await this.openai.chat.completions.create({
             model: this.model,
@@ -315,14 +337,16 @@ export class AnthropicChat implements Chat {
     model: string;
     provider: string = "anthropic";
     label?: string;
+    systemPrompt?: string;
     private history: Message[] = [];
     private anthropic: Anthropic;
 
-    constructor(history: Message[], model: string) {
+    constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
         this.model = model;
         this.history = history;
-        this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-        if (!process.env.ANTHROPIC_API_KEY) {
+        this.systemPrompt = systemPrompt;
+        this.anthropic = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
+        if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
             throw new Error("ANTHROPIC_API_KEY environment variable is required");
         }
     }
@@ -364,7 +388,7 @@ export class AnthropicChat implements Chat {
             throw "at least one part or attachment is required";
         }
         
-        const messages = [
+        const messages: Anthropic.Messages.MessageParam[] = [
             ...this.history.map((msg) => ({
                 role: this.toAnthropicRole(msg.role),
                 content: this.convertPartsToAnthropicContent(msg.parts)
@@ -378,6 +402,7 @@ export class AnthropicChat implements Chat {
         const stream = await this.anthropic.messages.create({
             model: this.model,
             messages,
+            system: this.systemPrompt,
             stream: true,
             max_tokens: 4096
         });

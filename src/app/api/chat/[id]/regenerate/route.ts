@@ -4,12 +4,13 @@ import redis, { CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, USER_CHATS_KEY } from "@
 import { GetChat } from "../../route";
 import { Message } from "@/app/lib/types/ai";
 import { getChatClass } from "@/app/lib/utils/getChatClass";
+import { getUserApiKeys, getProviderApiKey } from "@/app/lib/utils/byok";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     if (!redis) {
         return new Response(JSON.stringify({ error: "Redis connection failure" }), { status: 500 });
     }
-    const user = await currentUser();
+    const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     if (user.banned) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     const { id } = params;
@@ -42,9 +43,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         try { return JSON.parse(msgStr); } catch { return null; }
     }).filter(Boolean);
     // Use provider and model from chatJson
+    const apiKey = getProviderApiKey(chatJson.provider, byok);
+    if (requireByok && !apiKey) {
+        return new Response(JSON.stringify({ error: `API key required for ${chatJson.provider}` }), { status: 403 });
+    }
     let chat;
     try {
-        chat = getChatClass(chatJson.provider, chatJson.model, prevMessages);
+        chat = getChatClass(chatJson.provider, chatJson.model, prevMessages, undefined, apiKey);
     } catch (e) {
         return NextResponse.json({ error: 'Unsupported chat provider' }, { status: 400 });
     }

@@ -8,14 +8,17 @@ export interface RecentChat {
 
 export function useRecentChats(count: number = 4) {
   const [chats, setChats] = useState<RecentChat[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchChats() {
+      setIsLoading(true);
       try {
         const res = await fetch(`/api/chat?page=1&limit=${count}`);
         const data = await res.json();
         if (!data.chats || !Array.isArray(data.chats)) {
           setChats([]);
+          setIsLoading(false);
           return;
         }
         const chatResults: RecentChat[] = await Promise.all(
@@ -33,12 +36,11 @@ export function useRecentChats(count: number = 4) {
           })
         );
         setChats(chatResults);
-      } catch {
-        setChats([]);
-      }
+      } catch { setChats([]) }
+      setIsLoading(false);
     }
     fetchChats();
   }, [count]);
 
-  return chats;
+  return { chats, isLoading };
 }

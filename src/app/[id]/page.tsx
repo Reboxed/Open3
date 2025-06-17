@@ -26,6 +26,10 @@ export default function Chat() {
     const [autoScroll, setAutoScroll] = useState(true);
     const programmaticScrollRef = useRef(false);
     const topSentinelRef = useRef<HTMLDivElement>(null);
+    const [streamError, setStreamError] = useState<string | null>(null);
+    const [model, setModel] = useState<string | null>(null);
+    const [provider, setProvider] = useState<string | null>(null);
+    const [byokRequired, setByokRequired] = useState(false);
 
     const fetchMessages = useCallback(async () => {
         setMessagesLoading(true);
@@ -38,7 +42,12 @@ export default function Chat() {
         if (!tabId) return;
         async function loadInitial() {
             const serverMessages = await fetchMessages();
-            setMessages(prev => [prev, serverMessages.messages].flat());
+            setMessages(prev => {
+                if (serverMessages.messages.length === prev.length) {
+                    return prev; // No new messages, return existing
+                }
+                return [prev, serverMessages.messages].flat();
+            });
             // Instantly scroll to bottom after initial messages load
             setTimeout(() => {
                 const messagesElement = messagesRef.current;
@@ -72,6 +81,63 @@ export default function Chat() {
             }
         }
     }, [messages, messagesLoading, autoScroll]);
+
+    const onSend = useCallback((message: string, attachments: { url: string; filename: string }[] = []) => {
+        // Add user message optimistically to UI
+        const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
+        setMessages(prev => [...prev, userMessage]);
+        setGenerating(true);
+
+        if (eventSourceRef.current) eventSourceRef.current.close();
+        const attachmentsParam = attachments.length > 0 ? `&attachments=${encodeURIComponent(JSON.stringify(attachments))}` : '';
+        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}${attachmentsParam}`);
+        eventSourceRef.current = eventSource;
+
+        let assistantMessage = "";
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            assistantMessage += data.candidates[0].content.parts[0].text;
+            setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage?.role === "model") {
+                    lastMessage.parts = [{ text: assistantMessage }];
+                    return [...newMessages];
+                } else {
+                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
+                }
+            });
+        };
+
+        eventSource.addEventListener("error", (event) => {
+            try {
+                const data = JSON.parse((event as MessageEvent).data);
+                if (data.error === "stream-failure") {
+                    setStreamError(data.message || "Stream failed");
+                }
+            } catch { }
+            eventSource.close();
+            setGenerating(false);
+        });
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            setGenerating(false);
+            // Do not overwrite messages with server messages on error
+        };
+
+        eventSource.addEventListener("done", () => {
+            eventSource.close();
+            setGenerating(false);
+            loadMessagesFromServer(tabId).then(r => {
+                // If the last message is not a model, update from server
+                if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
+                    setMessages(r.messages);
+                }
+                // Otherwise, keep the current state (preserve partial message)
+            });
+        });
+    }, [tabId, setMessages, setGenerating, setStreamError, messages]);
 
     useEffect(() => {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
@@ -119,7 +185,7 @@ export default function Chat() {
         }
         window.addEventListener("scroll", handleScroll);
         return () => window.removeEventListener("scroll", handleScroll);
-    }, []);
+    }, [onSend, tabId]);
 
     useEffect(() => {
         if (autoScroll) {
@@ -134,58 +200,6 @@ export default function Chat() {
         setAutoScroll(false);
     }
 
-    function onSend(message: string, attachments: { url: string; filename: string }[] = []) {
-        // Add user message optimistically to UI
-        const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
-        setMessages(prev => [...prev, userMessage]);
-        setGenerating(true);
-
-        if (eventSourceRef.current) eventSourceRef.current.close();
-        const attachmentsParam = attachments.length > 0 ? `&attachments=${encodeURIComponent(JSON.stringify(attachments))}` : '';
-        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}${attachmentsParam}`);
-        eventSourceRef.current = eventSource;
-
-        let assistantMessage = "";
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            assistantMessage += data.candidates[0].content.parts[0].text;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === "model") {
-                    lastMessage.parts = [{ text: assistantMessage }];
-                    return [...newMessages];
-                } else {
-                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-                }
-            });
-        };
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            setGenerating(false);
-            loadMessagesFromServer(tabId).then(r => setMessages(r.messages));
-        };
-
-        eventSource.addEventListener("done", () => {
-            eventSource.close();
-            setGenerating(false);
-            loadMessagesFromServer(tabId).then(r => setMessages(r.messages));
-        });
-    }
-
-    async function handleDeleteMessage(idx: number) {
-        if (idx === 0) {
-            // Delete the entire chat if the first message is deleted
-            await fetch(`/api/chat/${tabId}`, { method: "DELETE" });
-            // Redirect to home or another page after deletion
-            window.location.href = "/";
-            return;
-        }
-        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
-        setMessages(messages.slice(0, idx));
-    }
-
     // Regenerate handler for LLM responses
     const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
     const handleRegenerate = useCallback(async (idx: number) => {
@@ -193,7 +207,7 @@ export default function Chat() {
         await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
 
         const prevUserMsg = messages[idx - 1];
-        if (!prevUserMsg || prevUserMsg.role !== "user") {
+        if (!prevUserMsg || (prevUserMsg?.role) !== "user") {
             setRegeneratingIdx(null);
             return;
         }
@@ -220,6 +234,48 @@ export default function Chat() {
         });
     }, [messages, tabId]);
 
+    async function handleDeleteMessage(idx: number) {
+        if (idx === 0) {
+            // Delete the entire chat if the first message is deleted
+            await fetch(`/api/chat/${tabId}`, { method: "DELETE" });
+            // Redirect to home or another page after deletion
+            window.location.href = "/";
+            return;
+        }
+        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
+        setMessages(messages.slice(0, idx));
+    }
+
+    // Fetch chat info (model/provider) on mount
+    useEffect(() => {
+        if (!tabId) return;
+        fetch(`/api/chat/${tabId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.model && data.provider) {
+                    setModel(data.model);
+                    setProvider(data.provider);
+                }
+            })
+            .catch(() => {
+                setModel(null);
+                setProvider(null);
+            });
+    }, [tabId]);
+
+    useEffect(() => {
+        fetch("/api/byok-required").then(res => res.json()).then(data => {
+            setByokRequired(data.required);
+            if (data.required) {
+                window.location.href = "/settings";
+            }
+        });
+    }, []);
+
+    if (byokRequired) {
+        return null;
+    }
+
     return (
         <>
             {generating && autoScroll && (
@@ -241,7 +297,7 @@ export default function Chat() {
                         <>
                             {messages.map((message, idx) => (
                                 <MessageBubble
-                                    key={`${message.role}-${idx}`}
+                                    key={`${message?.role}-${idx}`}
                                     message={message}
                                     index={idx}
                                     onDelete={handleDeleteMessage}
@@ -250,6 +306,20 @@ export default function Chat() {
                                 />
                             ))}
                         </>
+                    )}
+                    {streamError && (
+                        <div className="w-full flex flex-col items-center gap-2 mt-4">
+                            <div className="text-red-500">Message generation failed. You can retry.</div>
+                            <button
+                                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
+                                onClick={() => {
+                                    setStreamError(null);
+                                    if (messages.length > 1) handleRegenerate(messages.length - 1);
+                                }}
+                            >
+                                Retry
+                            </button>
+                        </div>
                     )}
                     {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
                         <div className="col-span-2 flex justify-start items-start py-8 group relative">
@@ -273,25 +343,21 @@ export default function Chat() {
                         </div>
                     )}
                 </div>
-                {/* {!autoScroll && (
-                    <button
-                        onClick={handleScrollToBottom}
-                        className="fixed bottom-6 right-6 z-50 bg-white/15 hover:bg-white/25 cursor-pointer text-white rounded-full p-3 shadow-lg transition-all flex items-center justify-center"
-                        aria-label="Scroll to bottom"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 13l-7 7-7-7M12 20V4" />
-                        </svg>
-                    </button>
-                )} */}
-                <ChatInput onSend={onSend} loading={generating} className="w-[80%] max-md:w-[90%] max-w-[1000px]" />
+                <ChatInput
+                    onSend={onSend}
+                    loading={generating}
+                    className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
+                    model={model}
+                    provider={provider}
+                    isModelFixed
+                />
             </div>
         </>
     );
 }
 
 const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, onDelete?: (idx: number) => void, onRegenerate?: (idx: number) => void, regeneratingIdx?: number | null }) => {
-    const isUser = message.role === "user";
+    const isUser = message?.role === "user";
     const className = isUser
         ? "px-6 py-4 rounded-2xl mb-1 bg-white/[0.06] justify-self-end"
         : "p-2 mb-1";
@@ -412,7 +478,7 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                         </svg>
                     </span>
                 </button>
-                {message.role === "model" && onRegenerate && (
+                {message?.role === "model" && onRegenerate && (
                     <button
                         aria-label="Regenerate response"
                         onClick={() => onRegenerate(index)}
