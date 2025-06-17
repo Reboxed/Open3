@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NEW_TITLE_EVENT } from "../lib/constants";
+import { NEW_TITLE_EVENT } from "@/internal-lib/constants";
 
 export default function useTitleStream() {
     const [isConnected, setIsConnected] = useState(false);
