@@ -20,7 +20,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS
-- **Backend:** Next.js API routes, Bun, Redis
+- **Backend:** Next.js API routes, SSE, Redis
 - **Other:** Docker, ESLint, PostCSS
 
 ## Getting Started
