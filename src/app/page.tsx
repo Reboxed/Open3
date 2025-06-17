@@ -13,7 +13,7 @@ import 'highlight.js/styles/github-dark.css'; // Change to preferred style
 import { CreateChatResponse, CreateChatRequest } from "./api/chat/route";
 import { ApiError } from "@/app/lib/types/api";
 import { addTabs } from "./lib/utils/loadTabs";
-import { useClerk } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton, useClerk } from "@clerk/nextjs";
 import { useRecentChats } from "./hooks/useRecentChats";
 
 export default function Home() {
@@ -50,11 +50,11 @@ export default function Home() {
         sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, tabId: chat.id }));
         addTabs(localStorage, {
             id: chat.id,
-            link: `/${chat.id}`
+            link: `/chat/${chat.id}`
         });
         setIsLoading(false);
         startTransition(() => {
-            router.push(`/${chat.id}`);
+            router.push(`/chat/${chat.id}`);
         });
     }
 
@@ -91,47 +91,58 @@ export default function Home() {
     return (
         <div className="min-w-full min-h-0 flex-1 flex flex-col justify-center items-center">
             <div className="flex flex-col h-fit gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
-                <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
-                <ChatInput
-                    onSend={onSend}
-                    loading={isLoading || isPending}
-                    className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`}
-                    onModelChange={(model, provider) => {
-                        setSelectedModel(model);
-                        setSelectedProvider(provider);
-                    }}
-                />
-                {isRecentChatsLoading && (
-                    <RecentChatsSkeleton />
-                )}
-                {!isRecentChatsLoading && recentChats.length === 0 && auth.user && (
-                    <div className="w-full flex h-[230px] justify-center text-neutral-400 py-4 drop-shadow-md">
-                        Here your recent chats will show! Start a new chat to see them here
-                    </div>
-                )}
-                <div
-                    style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
-                    className={`grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
-                >
-                    {recentChats.map(chat => (
-                        <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {
-                            addTabs(localStorage, {
-                                id: chat.id,
-                                label: chat.label ?? "New Tab",
-                                link: `/${chat.id}`
-                            });
-
-                            setTimeout(() => {
-                                router.push(`/${chat.id}`)
-                            }, 75); // Delay to allow navigation to start
-                        }}>
-                            <span className="!text-white line-clamp-1">{chat.label || "Untitled"}</span>
-                            <p className="opacity-65 line-clamp-6 whitespace-pre-line">
-                                {chat.firstResponse || <span className="italic opacity-40">No LLM response yet.</span>}
-                            </p>
+                <SignedIn>
+                    <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
+                    <ChatInput
+                        onSend={onSend}
+                        loading={isLoading || isPending}
+                        className={`w-full ${(isLoading || isPending) ? "opacity-35" : "opacity-100"} transition-opacity duration-500 overflow-clip`}
+                        onModelChange={(model, provider) => {
+                            setSelectedModel(model);
+                            setSelectedProvider(provider);
+                        }}
+                    />
+                    {isRecentChatsLoading && (
+                        <RecentChatsSkeleton />
+                    )}
+                    {!isRecentChatsLoading && recentChats.length === 0 && (
+                        <div className="w-full flex h-[230px] justify-center text-neutral-400 py-4 drop-shadow-md">
+                            Here your recent chats will show! Start a new chat to see them here
                         </div>
-                    ))}
-                </div>
+                    )}
+                    <div
+                        style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                        className={`grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
+                    >
+                        {recentChats.map(chat => (
+                            <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {
+                                addTabs(localStorage, {
+                                    id: chat.id,
+                                    label: chat.label ?? "New Tab",
+                                    link: `/chat/${chat.id}`
+                                });
+
+                                setTimeout(() => {
+                                    router.push(`/chat/${chat.id}`)
+                                }, 75); // Delay to allow navigation to start
+                            }}>
+                                <span className="!text-white line-clamp-1">{chat.label || "Untitled"}</span>
+                                <p className="opacity-65 line-clamp-6 whitespace-pre-line">
+                                    {chat.firstResponse || <span className="italic opacity-40">No LLM response yet.</span>}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </SignedIn>
+                <SignedOut>
+                    <h2 className="!mb-0.5">Please sign in to use Open3</h2>
+                    <span className="mb-3 text-neutral-300">Inference is expensive, I couldn&apos;t manage to in-time make Open3 accessible to everyone with an additional paid plan in the time frame of the hackathon. But I am dedicated to refactoring this project after the hackathon, adding more features and bringing it online!</span>
+                    <ChatInput
+                        className={`w-full opacity-35 pointer-events-none overflow-clip`}
+                        isModelFixed
+                    />
+                    <RecentChatsSkeleton />
+                </SignedOut>
             </div>
         </div>
     );

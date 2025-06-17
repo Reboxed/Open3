@@ -183,7 +183,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     // Detect OS for shortcut display
     const [closeShortcut, setCloseShortcut] = useState('Alt+W');
     useEffect(() => {
-        const isMac = navigator.platform.toLowerCase().includes('mac');
+        const isMac = navigator.userAgent.toLowerCase().includes('mac');
         setCloseShortcut(isMac ? '⌥W' : 'Alt+W');
     }, []);
 

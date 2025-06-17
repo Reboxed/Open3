@@ -1,18 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import ChatInput from "../components/ChatInput";
+import ChatInput from "../../components/ChatInput";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css"; // Change to preferred style
-import { Message } from "../lib/types/ai";
+import { Message } from "../../lib/types/ai";
 import { escape } from "html-escaper";
-import rehypeClassAll from "../lib/utils/rehypeClassAll";
+import rehypeClassAll from "../../lib/utils/rehypeClassAll";
 import { useParams } from "next/navigation";
-import { loadMessagesFromServer } from "../lib/utils/messageUtils";
+import { loadMessagesFromServer } from "../../lib/utils/messageUtils";
 import Image from "next/image";
+import { Protect, SignedOut } from "@clerk/nextjs";
 
 export default function Chat() {
     const params = useParams();
@@ -277,60 +278,61 @@ export default function Chat() {
 
     return (
         <>
-            {generating && autoScroll && (
-                <button
-                    onClick={handleStopAutoScroll}
-                    className="z-50 top-18 backdrop-blur-2xl fixed left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
-                    aria-label="Stop automatic scroll"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Stop automatic scroll
-                </button>
-            )}
-            <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
-                <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-2 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
-                    <div ref={topSentinelRef} style={{ height: 1 }} />
-                    {!messagesLoading && (
-                        <>
-                            {messages.map((message, idx) => (
-                                <MessageBubble
-                                    key={`${message?.role}-${idx}`}
-                                    message={message}
-                                    index={idx}
-                                    onDelete={handleDeleteMessage}
-                                    onRegenerate={handleRegenerate}
-                                    regeneratingIdx={regeneratingIdx}
-                                />
-                            ))}
-                        </>
-                    )}
-                    {streamError && (
-                        <div className="w-full flex flex-col items-center gap-2 mt-4">
-                            <div className="text-red-500">Message generation failed. You can retry.</div>
-                            <button
-                                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
-                                onClick={() => {
-                                    setStreamError(null);
-                                    if (messages.length > 1) handleRegenerate(messages.length - 1);
-                                }}
-                            >
-                                Retry
-                            </button>
-                        </div>
-                    )}
-                    {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
-                        <div className="col-span-2 flex justify-start items-start py-8 group relative">
-                            <span className="flex gap-1">
-                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
-                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-                                <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
-                            </span>
-                            <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 bg-neutral-800 text-white text-xs rounded px-3 py-2 shadow-lg z-10 w-max max-w-xs">
-                                Why is this showing? Latency, reasoning and uploading files
+            <Protect>
+                {generating && autoScroll && (
+                    <button
+                        onClick={handleStopAutoScroll}
+                        className="z-50 top-18 backdrop-blur-2xl fixed left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
+                        aria-label="Stop automatic scroll"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Stop automatic scroll
+                    </button>
+                )}
+                <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
+                    <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-2 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
+                        <div ref={topSentinelRef} style={{ height: 1 }} />
+                        {!messagesLoading && (
+                            <>
+                                {messages.map((message, idx) => (
+                                    <MessageBubble
+                                        key={`${message?.role}-${idx}`}
+                                        message={message}
+                                        index={idx}
+                                        onDelete={handleDeleteMessage}
+                                        onRegenerate={handleRegenerate}
+                                        regeneratingIdx={regeneratingIdx}
+                                    />
+                                ))}
+                            </>
+                        )}
+                        {streamError && (
+                            <div className="w-full flex flex-col items-center gap-2 mt-4">
+                                <div className="text-red-500">Message generation failed. You can retry.</div>
+                                <button
+                                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
+                                    onClick={() => {
+                                        setStreamError(null);
+                                        if (messages.length > 1) handleRegenerate(messages.length - 1);
+                                    }}
+                                >
+                                    Retry
+                                </button>
                             </div>
-                            <style jsx>{`
+                        )}
+                        {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
+                            <div className="col-span-2 flex justify-start items-start py-8 group relative">
+                                <span className="flex gap-1">
+                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                                </span>
+                                <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 bg-neutral-800 text-white text-xs rounded px-3 py-2 shadow-lg z-10 w-max max-w-xs">
+                                    Why is this showing? Latency, reasoning and uploading files
+                                </div>
+                                <style jsx>{`
                                 @keyframes bounce {
                                     0%, 80%, 100% { transform: translateY(0); }
                                     40% { transform: translateY(-8px); }
@@ -339,18 +341,31 @@ export default function Chat() {
                                     animation: bounce 1s infinite;
                                 }
                             `}</style>
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
+                    <ChatInput
+                        onSend={onSend}
+                        loading={generating}
+                        className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
+                        model={model}
+                        provider={provider}
+                        isModelFixed
+                    />
                 </div>
-                <ChatInput
-                    onSend={onSend}
-                    loading={generating}
-                    className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
-                    model={model}
-                    provider={provider}
-                    isModelFixed
-                />
-            </div>
+            </Protect>
+            <SignedOut>
+                <div className="min-w-full min-h-0 flex-1 flex flex-col justify-center items-center">
+                    <div className="flex flex-col h-fit gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
+                        <h2 className="!mb-0.5">Please sign in to use Open3</h2>
+                        <span className="mb-3 text-neutral-300">Inference is expensive, I couldn&apos;t manage to in-time make Open3 accessible to everyone with an additional paid plan in the time frame of the hackathon. But I am dedicated to refactoring this project after the hackathon, adding more features and bringing it online!</span>
+                        <ChatInput
+                            className={`w-full opacity-35 pointer-events-none overflow-clip`}
+                            isModelFixed
+                        />
+                    </div>
+                </div>
+            </SignedOut>
         </>
     );
 }

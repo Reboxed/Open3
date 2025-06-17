@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Tabs, { Tab } from "./Tabs";
 import { setTabs as setTabsS, getTabs } from "../lib/utils/loadTabs";
-import { ClerkLoading, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { ClerkLoading, Protect, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { usePathname, useRouter } from "next/navigation";
 import ChatPalette from "./ChatPalette";
@@ -46,13 +46,13 @@ export function Navbar() {
 
     // Get the appropriate title for a tab
     const getTabTitle = useCallback((tab: Tab): string => {
-        if (tab.permanent) return tab.label ?? "Open3";
+        if (tab.permanent) return tab.label ?? "Untitled Tab";
         if (!tab.id) return tab.label ?? "New Chat";
 
         // Streaming title takes precedence over API title
         const streamingTitle = streamingTitles.get(tab.id);
         if (streamingTitle !== undefined) {
-            return streamingTitle || "Generating title...";
+            return streamingTitle || "...";
         }
 
         const apiTitle = apiTitles.get(tab.id);
@@ -85,11 +85,13 @@ export function Navbar() {
         if (filteredTabs.length !== tabsToCheck.length) {
             setTabsS(localStorage, filteredTabs);
             setTabs(filteredTabs);
-            const currentTab = filteredTabs.find(tab => tab.link === pathname);
-            if (!currentTab) {
-                if (filteredTabs.length > 0) {
-                    router.replace(filteredTabs[0].link ?? "/");
-                } else router.replace("/");
+            if (pathname.startsWith("/chat/")) {
+                const currentTab = filteredTabs.find(tab => tab.link === pathname);
+                if (!currentTab) {
+                    if (filteredTabs.length > 0) {
+                        router.replace(filteredTabs[0].link ?? "/");
+                    } else router.replace("/");
+                }
             }
         } else {
             setTabs(tabsToCheck);
@@ -108,13 +110,14 @@ export function Navbar() {
     // Single effect to sync tabs and clean up deleted ones
     useEffect(() => {
         const lsTabs = getTabs(localStorage);
-        if (pathname === "/settings") return;
-        let activeFound = false;
-        for (let i = 0; i < lsTabs.length; i++) {
-            lsTabs[i].active = lsTabs[i].link == pathname;
-            if (lsTabs[i].active) activeFound = true;
+        if (pathname.startsWith("/chat/")) {
+            let activeFound = false;
+            for (let i = 0; i < lsTabs.length; i++) {
+                lsTabs[i].active = lsTabs[i].link == pathname;
+                if (lsTabs[i].active) activeFound = true;
+            }
+            if (!activeFound && lsTabs.length > 0) router.replace("/");
         }
-        if (!activeFound && lsTabs.length > 0) router.replace("/");
         cleanTabs(lsTabs);
         // Only update localStorage if tabs changed
         setTabsS(localStorage, lsTabs);
@@ -192,7 +195,9 @@ export function Navbar() {
                     </div>
                 </div>
             </nav>
-            <ChatPalette onDismiss={() => setShowPalette(false)} hidden={!showPalette} className="" />
+            <Protect>
+                <ChatPalette onDismiss={() => setShowPalette(false)} hidden={!showPalette} className="" />
+            </Protect>
         </>
     )
 }
@@ -205,11 +210,13 @@ function UserComponent() {
     return (
         <>
             <SignedOut>
-                <SignInButton />
-                <SignUpButton />
+                <div className="pb-2.5 flex justify-center items-center h-full gap-4 pr-4 [&>*]:cursor-pointer [&>*]:hover:text-neutral-50/50 [&>*]:transition-all [&>*]:duration-200">
+                    <SignInButton mode="modal" appearance={{ baseTheme: dark }} />
+                    <SignUpButton mode="modal" appearance={{ baseTheme: dark }} />
+                </div>
             </SignedOut>
             <SignedIn>
-                <div className="pb-2.5 min-w-[68px] flex justify-center items-center gap-4">
+                <div className="pb-2.5 min-w-[68px] flex justify-center items-center gap-4 pr-4">
                     <button
                         className={`h-9 w-9 ${!isSettingsPage ? "bg-black/15 shadow-inactive-button" : "bg-primary shadow-active-button"} rounded-xl cursor-pointer transition-all duration-200`}
                         title="Settings / API Keys"
@@ -217,15 +224,19 @@ function UserComponent() {
                     >
                         <span role="img" aria-label="settings">⚙️</span>
                     </button>
-                    <UserButton appearance={{
-                        baseTheme: dark,
-                        elements: {
-                            logoImage: {
-                                width: "36px",
-                                height: "36px"
+                    <UserButton
+                        appearance={{
+                            baseTheme: dark,
+                            elements: {
+                                logoImage: {
+                                    width: "36px",
+                                    height: "36px"
+                                }
                             }
-                        }
-                    }} />
+                        }}
+                        userProfileProps={{ appearance: { baseTheme: dark } }}
+                        userProfileMode="modal"
+                    />
                 </div>
             </SignedIn>
             <ClerkLoading>
@@ -236,8 +247,19 @@ function UserComponent() {
 }
 
 function LoadingUserComponent() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const isSettingsPage = pathname.startsWith("/settings");
+
     return (
-        <div className="flex gap-4 items-center min-w-[68px] pt-1">
+        <div className="pb-2.5 min-w-[68px] flex justify-center items-center gap-4">
+            <button
+                className={`h-9 w-9 ${!isSettingsPage ? "bg-black/15 shadow-inactive-button" : "bg-primary shadow-active-button"} rounded-xl cursor-pointer transition-all duration-200`}
+                title="Settings / API Keys"
+                onClick={() => router.push("/settings")}
+            >
+                <span role="img" aria-label="settings">⚙️</span>
+            </button>
             <span className="text-transparent w-[28px] h-[28px] rounded-full bg-white/15">.</span>
         </div>
     )

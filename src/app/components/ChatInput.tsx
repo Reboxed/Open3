@@ -95,7 +95,6 @@ export default function ChatInput({ onSend, className, loading, isModelFixed = f
     }, [modelCapabilities, model, onModelChange, isModelFixed]);
 
     // Find the selected model's capabilities
-    console.log("Model capabilities:", model);
     const selectedModel = modelCapabilities?.get(model ?? "") || modelCapabilities?.values().find(m => m.name === model) || modelCapabilities?.get("google/gemini-2.5-flash") || modelCapabilities?.values()?.toArray()?.[0];
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

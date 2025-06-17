@@ -57,7 +57,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     // Scroll/selection effect
     useEffect(() => {
         const listElement = listRef.current;
-        const chatOverflow = Math.min(5, localChats.chats.length);
+        const chatOverflow = Math.min(5, localChats?.chats?.length);
         if (listElement) {
             if (selected[0] >= chatOverflow || listElement.scrollTop >= 60) {
                 const scrollDistance = Math.max(0, selected[0] - chatOverflow + 1) * 64;
@@ -76,7 +76,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 }
             }
         }
-    }, [selected, localChats.chats.length]);
+    }, [selected, localChats?.chats?.length]);
 
     useEffect(() => {
         const selectedDiv = selectedRef.current;
@@ -100,9 +100,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         addTabs(localStorage, {
             id: chat.id,
             label: chat.label ?? "New Tab",
-            link: `/${chat.id}`
+            link: `/chat/${chat.id}`
         });
-        router.push(`/${chat.id}`);
+        router.push(`/chat/${chat.id}`);
         setTimeout(() => {
             onDismiss();
         }, 75); // Delay to allow navigation to start
@@ -429,7 +429,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     // Group chats into sections (memoized)
     const chatsWithSections = useMemo(() => {
         const sections: Array<{ section: string; chats: typeof filteredChats }> = [];
-        filteredChats.forEach(chat => {
+        filteredChats?.forEach(chat => {
             const createdAt = chat.createdAt ? new Date(chat.createdAt) : new Date();
             const section = getSectionLabel(createdAt);
             if (!sections.length || sections[sections.length - 1].section !== section) {
@@ -461,12 +461,11 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         const el = chatItemRefs.current[selected[0]];
         if (el && selectedRef.current) {
             const rect = el.getBoundingClientRect();
-            const listRect = listRef.current.getBoundingClientRect();
             const top = el.offsetTop;
             selectedRef.current.style.setProperty("--top-pos", `${top}px`);
             selectedRef.current.style.height = `${rect.height}px`;
         }
-    }, [selected, chatsWithSections, filteredChats.length, hidden]);
+    }, [selected, chatsWithSections, filteredChats?.length, hidden]);
 
     return (
         <>

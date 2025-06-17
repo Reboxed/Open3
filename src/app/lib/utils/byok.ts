@@ -4,6 +4,12 @@ export async function getUserApiKeys() {
     const user = await currentUser();
     if (!user) return { requireByok: false, byok: {}, user };
     const requireByok = process.env.REQUIRE_BYOK === "true" && user.privateMetadata?.team !== true;
+    if (!requireByok) return { requireByok, byok: {
+        // openaiKey: process.env.OPENAI_API_KEY,
+        // anthropicKey: process.env.ANTHROPIC_API_KEY,
+        // geminiKey: process.env.GOOGLE_GEN_AI_API_KEY,
+        openrouterKey: process.env.OPENROUTER_API_KEY,
+    }, user };
     const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
     return { requireByok, byok, user };
 }

@@ -43,19 +43,21 @@ export class OpenRouterChat implements Chat {
     label?: string;
     systemPrompt?: string;
     private history: Message[] = [];
-    private openai: OpenAI;
+    private openai: OpenAI | null = null;
 
     constructor(history: Message[], model: string, systemPrompt?: string, apiKey?: string) {
         this.model = model;
         this.history = history;
         this.systemPrompt = systemPrompt;
         this.provider = "openrouter";
-        this.openai = new OpenAI({
-            apiKey: apiKey || process.env.OPENROUTER_API_KEY,
-            baseURL: "https://openrouter.ai/api/v1"
-        });
-        if (!apiKey && !process.env.OPENROUTER_API_KEY) {
-            throw new Error("OPENROUTER_API_KEY environment variable is required");
+        if (apiKey) {
+            this.openai = new OpenAI({
+                apiKey: apiKey,
+                baseURL: "https://openrouter.ai/api/v1"
+            });
+            if (!apiKey) {
+                throw new Error("No API key provider");
+            }
         }
     }
 
@@ -107,6 +109,10 @@ export class OpenRouterChat implements Chat {
     }
 
     async sendStream(message: Message, maxCompletionTokens?: number): Promise<ReadableStream> {
+        if (!this.openai) {
+            throw new Error("OpenAI client is not initialized. Please provide an API key.");
+        }
+
         if (!message.parts[0] && (!message.attachments || message.attachments.length === 0)) {
             throw "at least one part or attachment is required";
         }
@@ -177,6 +183,10 @@ export class OpenRouterChat implements Chat {
     }
 
     async send(message: Message, maxCompletionTokens?: number): Promise<string> {
+        if (!this.openai) {
+            throw new Error("OpenAI client is not initialized. Please provide an API key.");
+        }
+        
         const caps = this.getCurrentModelCapabilities();
         const allowImages = !!caps?.supportsAttachmentsImages;
         const allowPDFs = !!caps?.supportsAttachmentsPDFs;

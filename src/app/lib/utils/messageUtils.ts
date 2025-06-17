@@ -9,7 +9,7 @@ export async function loadMessagesFromServer(chatId: string): Promise<{
     try {
         const response = await fetch(`/api/chat/${chatId}/messages`);
         if (!response.ok) {
-            console.error('Failed to load messages:', response.statusText);
+            // console.error('Failed to load messages:', response.statusText);
             return { messages: [], generating: false };
         }
         const data = await response.json();
