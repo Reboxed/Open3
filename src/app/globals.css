@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-    --background: #ffffff;
-    --foreground: #171717;
+    --background: #191919;
+    --foreground: #ededed;
 }
 
 @theme inline {
@@ -28,13 +28,6 @@
     .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
-    }
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        --background: #191919;
-        --foreground: #ededed;
     }
 }
 
@@ -66,11 +59,11 @@ table {
 }
 
 thead {
-    @apply text-xs uppercase dark:bg-white/[0.08] border-b-1 border-black/[0.93] font-semibold;
+    @apply text-xs uppercase bg-white/[0.08] border-b-1 border-black/[0.93] font-semibold;
 }
 
 tbody>tr {
-    @apply bg-white dark:bg-white/[0.04] border-gray-200;
+    @apply bg-white bg-white/[0.04] border-gray-200;
 }
 
 tbody>th {
