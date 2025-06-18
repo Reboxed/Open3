@@ -105,7 +105,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 ### *Chapter 2:* Publishing
 6. Migration to Reboxed infrastructure and SDKs since by then probably stable (Rebxd Auth, Rebxd Serverless, Rebxd Storage, Rebxd Realtime DB, etc. What is Rebxd? Right now not yet launched but check out our [Discord](https://discord.gg/xsBn7D9n6K) and YouTube (@rebxdcloud) so yeah)
 7. Adding captchas
-8. Clerk billing integration
+8. Stripe billing integration
 9. Posthog for analytics
 10. Mobile app! (We have some really talented mobile devs on the team including me too)
 11. Chat sharing and "collaborative chatting" — what that is y'all will find out soon 👀 
