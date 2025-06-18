@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
 
                         lastId = messages[messages.length - 1][0]; // Update lastId to the last message ID
                         if (shouldDeleteStream) {
-                            await redis.del(streamKey);
+                            await sub.xtrim(streamKey, "MAXLEN", 0);
                         }
                     }
 
