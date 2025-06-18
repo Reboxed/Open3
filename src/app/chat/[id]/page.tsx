@@ -176,7 +176,7 @@ export default function Chat() {
         const streamErrorEvent = (event: MessageEvent) => {
             setStreamError(event.data || "An error occurred");
             setGenerating(false);
-        } 
+        }
         eventSource.addEventListener("stream-error", streamErrorEvent);
 
         let assistantMessage = "";
@@ -193,7 +193,7 @@ export default function Chat() {
                     return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
                 }
             });
-        } 
+        }
         eventSource.addEventListener("stream", streamEvent);
 
         eventSource.addEventListener("error", (event) => {
@@ -442,6 +442,77 @@ export default function Chat() {
     );
 }
 
+const PreWithCopy = ({ node, className, children, ...props }: any) => {
+    let language = "";
+    let codeText = "";
+    // Find the code child and extract its className for language
+    React.Children.forEach(children, child => {
+        if (
+            React.isValidElement(child) && child.type === "code" && typeof (child as any)?.props?.className === "string"
+        ) {
+            const match = (child as any)?.props?.className?.match(/language-(\w+)/);
+            if (match) language = match[1];
+            codeText = (child as any)?.props?.children ?? "";
+        }
+    });
+
+    // Local state for copy feedback
+    const [copiedCode, setCopiedCode] = useState(false);
+    const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleCopyCode = async () => {
+        if (copiedCode) return;
+        try {
+            await navigator.clipboard.writeText(
+                Array.isArray(codeText)
+                    ? codeText.flat().map((item: any) => typeof item === "string" ? item : (item?.props?.children ? String(item.props.children) : "")).join("")
+                    : typeof codeText === "string"
+                        ? codeText
+                        : ""
+            );
+            setCopiedCode(true);
+            copyTimeoutRef.current = setTimeout(() => setCopiedCode(false), 2000);
+        } catch { }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+        };
+    }, []);
+
+    return (
+        <div className="flex flex-col gap-2">
+            <pre className={`${className} flex flex-col !p-1`}>
+                <div className="bg-white/[0.07] w-full rounded-xl rounded-b-md py-2 px-4 flex gap-4 justify-between items-center">
+                    <span className="text-sm font-mono">{language ? language[0].toUpperCase() + language.slice(1): "Code"}</span>
+                    <button
+                        aria-label={copiedCode ? "Copied!" : "Copy code"}
+                        onClick={handleCopyCode}
+                        className={`relative transition-all duration-300 hover:text-neutral-50/75 !text-white rounded-full flex items-center justify-center z-10 cursor-pointer ${copiedCode ? "text-neutral-50" : ""}`}
+                        style={{ width: 36, height: 36 }}
+                    >
+                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copiedCode ? "scale(0)" : "scale(1)", zIndex: copiedCode ? 0 : 1 }}>
+                            {/* Copy SVG */}
+                            <svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
+                                <rect x="6" y="6" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                                <rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                            </svg>
+                        </span>
+                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copiedCode ? "scale(1)" : "scale(0)", zIndex: copiedCode ? 1 : 0 }}>
+                            {/* Checkmark SVG */}
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="currentColor" strokeWidth="1.5" />
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+                {children}
+            </pre>
+        </div>
+    );
+};
+
 const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, onDelete?: (idx: number) => void, onRegenerate?: (idx: number) => void, regeneratingIdx?: number | null }) => {
     const isUser = message?.role === "user";
     const className = isUser
@@ -460,6 +531,9 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                 unwrapDisallowed={true}
                 rehypePlugins={rehypePlugins as any[]}
                 remarkPlugins={[remarkGfm]}
+                components={{
+                    pre: PreWithCopy
+                }}
             >
                 {isUser ? escape(message?.parts[0]?.text ?? "") : message.parts[0].text}
             </Markdown>
@@ -504,11 +578,13 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
     const chatId = params.id?.toString() ?? "";
     const AttachmentPreview = ({ att, chatId }: { att: { url: string; filename: string }, chatId: string }) => {
         const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
-        const [imgSrc, setImgSrc] = React.useState(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
-        React.useEffect(() => {
+        const [imgSrc, setImgSrc] = useState(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
+        
+        useEffect(() => {
             setImgSrc(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
         }, [chatId, att.filename]);
-        const handleImgError = React.useCallback(() => {
+
+        const handleImgError = useCallback(() => {
             setImgSrc(`/attachments/global/${encodeURIComponent(att.filename)}`);
         }, [att.filename]);
         if (isImage) {

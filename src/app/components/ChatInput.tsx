@@ -175,9 +175,8 @@ export default function ChatInput({ onSend,
                         onPaste={(e) => {
                             e.preventDefault()
                             const text = e.clipboardData.getData("text/plain");
-                            window.navigator.clipboard.writeText(text).catch(() => {
-                                setErrorToast("Failed to copy text");
-                            });
+                            e.currentTarget.innerText = text;
+                            setInputValue(text.trim());
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {

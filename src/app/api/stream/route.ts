@@ -6,8 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(req: NextRequest) {
     // This endpoint is responsible for introducing robust streaming capabilities to the app, even across clients.
     // The way it will work is by using a shared redis stream that all clients of a user will listen to.
-    // TODO: If the user disconnects, the stream will be closed and a new one will be created, but all previous messages
-    // TODO: should be resent on reconnect.
+    // If the user disconnects, the stream will be closed and a new one will be created, but all previous messages
+    // should be resent on reconnect.
     let shouldRun = true;
 
     const chatId = req.nextUrl.searchParams.get("chat");
@@ -44,10 +44,11 @@ export async function GET(req: NextRequest) {
                 let lastId = "0"; // "0" to start reading from the beginning of the stream
 
                 try {
+                    const streamKey = MESSAGE_STREAM_KEY(chatId);
                     while (shouldRun) {
                         const res = await sub.xread(
                             "BLOCK", 5000, // 5 seconds max wait to check shouldRun periodically
-                            "STREAMS", MESSAGE_STREAM_KEY(chatId), lastId
+                            "STREAMS", streamKey, lastId
                         ).catch((err) => {
                             console.error("Error reading from Redis stream:", err);
                             return null; // Handle error gracefully

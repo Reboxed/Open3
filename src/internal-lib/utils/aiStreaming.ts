@@ -135,8 +135,8 @@ export async function doAiResponseInBackground(userId: string, message: Message,
                     const text = chunkText.slice(6).replace(/\n\n$/, "");
                     fullResponse += text;
 
-                    // This is probably how not to do it, buuuttttt
-                    await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "chunk", text).catch((err) => {
+                    // Add the chunk to the Redis stream
+                    redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "chunk", text).catch((err) => {
                         console.error(err);
                         return null;
                     });

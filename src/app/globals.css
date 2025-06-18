@@ -113,11 +113,11 @@ blockquote>blockquote {
 
 pre:has(>code) {
     @apply !bg-black/10 !shadow-inactive-button flex !items-stretch max-w-full overflow-x-scroll;
-    @apply !py-3 !px-5 !my-3 !border !border-white/5 !rounded-2xl;
+    @apply !my-3 !border !border-white/5 !rounded-2xl;
 }
 
 pre>code {
-    @apply overflow-x-auto !bg-transparent max-w-full;
+    @apply overflow-x-auto !bg-transparent max-w-full !py-5 !px-7 !pt-4;
 }
 
 hr {
