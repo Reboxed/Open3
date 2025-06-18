@@ -462,14 +462,39 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
 
     const handleCopyCode = async () => {
         if (copiedCode) return;
+        
+        // Not fast, not good, but it works
+        // FIXME: This is a temporary solution to extract text from React children
         try {
-            await navigator.clipboard.writeText(
-                Array.isArray(codeText)
-                    ? codeText.flat().map((item: any) => typeof item === "string" ? item : (item?.props?.children ? String(item.props.children) : "")).join("")
-                    : typeof codeText === "string"
-                        ? codeText
-                        : ""
-            );
+            // Try to extract plain text from React children
+            let textToCopy = "";
+            if (typeof codeText === "string") {
+                textToCopy = codeText;
+            } else if (Array.isArray(codeText)) {
+                // Recursively extract text from React children
+                const extractText = (children: any): string => {
+                    try {
+                        if (typeof children === "string") return children;
+                        if (Array.isArray(children)) return children.map(extractText).join("");
+                        if (React.isValidElement(children) && (children.props as any)?.children)
+                            return extractText((children.props as any).children);
+                    } catch { }
+                    return "";
+                };
+                textToCopy = extractText(codeText);
+            } else if (React.isValidElement(codeText) && (children.props as any)?.children) {
+                const extractText = (children: any): string => {
+                    try {
+                        if (typeof children === "string") return children;
+                        if (Array.isArray(children)) return children.map(extractText).join("");
+                        if (React.isValidElement(children) && (children.props as any)?.children)
+                            return extractText((children.props as any).children);
+                    } catch { }
+                    return "";
+                };
+                textToCopy = extractText((children.props as any).children);
+            }
+            await navigator.clipboard.writeText(textToCopy);
             setCopiedCode(true);
             copyTimeoutRef.current = setTimeout(() => setCopiedCode(false), 2000);
         } catch { }
@@ -485,7 +510,7 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
         <div className="flex flex-col gap-2">
             <pre className={`${className} flex flex-col !p-1`}>
                 <div className="bg-white/[0.07] w-full rounded-xl rounded-b-md py-2 px-4 flex gap-4 justify-between items-center">
-                    <span className="text-sm font-mono">{language ? language[0].toUpperCase() + language.slice(1): "Code"}</span>
+                    <span className="text-sm font-mono">{language ? language[0].toUpperCase() + language.slice(1) : "Code"}</span>
                     <button
                         aria-label={copiedCode ? "Copied!" : "Copy code"}
                         onClick={handleCopyCode}
@@ -579,7 +604,7 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
     const AttachmentPreview = ({ att, chatId }: { att: { url: string; filename: string }, chatId: string }) => {
         const isImage = /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(att.filename);
         const [imgSrc, setImgSrc] = useState(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
-        
+
         useEffect(() => {
             setImgSrc(`/attachments/${chatId}/${encodeURIComponent(att.filename)}`);
         }, [chatId, att.filename]);
