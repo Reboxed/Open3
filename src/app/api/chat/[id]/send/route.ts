@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const userMessage: Message = {
         role: "user",
         parts: [{ text: prompt }],
-        attachments: attachments.length > 0 ? attachments : undefined
+        attachments: (attachments?.length ?? 0) > 0 ? attachments : undefined
     };
 
     // Prepare runtime message for AI: clone userMessage and inject loaded file data into parts
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         setImmediate(() => {
             // Run AI response generation in the background
-            doAiResponseInBackground(user, runtimeUserMessage, chatJson.id, chat);
+            doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat);
         });
 
         return NextResponse.json({

@@ -32,12 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Truncate messages up to fromIndex
-    const messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
-    const keepMessages = messageStrings.slice(0, fromIndex);
-    await redis.del(CHAT_MESSAGES_KEY(id));
-    if (keepMessages.length > 0) {
-        await redis.rpush(CHAT_MESSAGES_KEY(id), ...keepMessages);
-    }
+    const messages = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
 
     // Get chat info
     const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
@@ -53,7 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "Chat provider or model not set" } as ApiError, { status: 400 });
     }
 
-    const prevMessages = keepMessages.map(msgStr => {
+    const prevMessages = messages.map(msgStr => {
         try { return JSON.parse(msgStr); } catch { return null; }
     }).filter(Boolean);
 
@@ -120,7 +115,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         setImmediate(() => {
             // Run AI response generation in the background
-            doAiResponseInBackground(user, runtimeUserMessage, chatJson.id, chat);
+            doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat);
         });
 
         return NextResponse.json({

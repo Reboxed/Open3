@@ -133,7 +133,7 @@ export default function Chat() {
             return;
         }
 
-        const response = await fetch(`/api/chat/${tabId}/send`, {
+        const response = await fetch(`/api/chat/${tabId}/regenerate?fromIndex=${idx}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
@@ -159,13 +159,94 @@ export default function Chat() {
     }, [messages, tabId]);
 
     useEffect(() => {
+        if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+            eventSourceRef.current = null;
+            return;
+        }
+        const eventSource = new EventSource(`/api/stream?` + new URLSearchParams({ chat: tabId }).toString());
+        eventSourceRef.current = eventSource;
+
+        const streamDoneEvent = (event: MessageEvent) => {
+            reloadMessagesFromServerIfStateInvalid();
+            setGenerating(false);
+        }
+        eventSource.addEventListener("stream-done", streamDoneEvent);
+
+        const streamErrorEvent = (event: MessageEvent) => {
+            setStreamError(event.data || "An error occurred");
+            setGenerating(false);
+        } 
+        eventSource.addEventListener("stream-error", streamErrorEvent);
+
+        let assistantMessage = "";
+        const streamEvent = (event: MessageEvent) => {
+            setGenerating(true);
+            assistantMessage += event.data;
+            setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage?.role === "model") {
+                    lastMessage.parts = [{ text: assistantMessage }];
+                    return [...newMessages];
+                } else {
+                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
+                }
+            });
+        } 
+        eventSource.addEventListener("stream", streamEvent);
+
+        eventSource.addEventListener("error", (event) => {
+            console.warn("EventSource error:", event);
+            try {
+                const data = JSON.parse((event as MessageEvent).data);
+                if (data.error === "stream-failure") {
+                    setStreamError(data.message || "Stream failed");
+                }
+            } catch { }
+            eventSource.close();
+            setGenerating(false);
+        }, { once: true });
+
+        eventSource.addEventListener("done", () => {
+            console.log("Stream done");
+            reloadMessagesFromServerIfStateInvalid();
+            eventSource.close();
+            setGenerating(false);
+        }, { once: true });
+
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.removeEventListener("stream", streamEvent);
+                eventSourceRef.current.removeEventListener("stream-done", streamDoneEvent);
+                eventSourceRef.current.removeEventListener("stream-error", streamErrorEvent);
+                eventSourceRef.current.close();
+                eventSourceRef.current = null;
+            }
+        }
+    }, [tabId]);
+
+
+    useEffect(() => {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
         if (tempNewMsg) {
             try {
                 const parsedMsg = JSON.parse(tempNewMsg);
                 if (parsedMsg.tabId === tabId) {
-                    onSend(parsedMsg.message, parsedMsg.attachments || []);
+                    const waitUntilEventSource = new Promise<void>((resolve) => {
+                        const checkEventSource = () => {
+                            if (eventSourceRef.current) {
+                                resolve();
+                            } else {
+                                setTimeout(checkEventSource, 50);
+                            }
+                        };
+                        checkEventSource();
+                    });
                     sessionStorage.removeItem("temp-new-tab-msg");
+                    waitUntilEventSource.then(() => {
+                        onSend(parsedMsg.message, parsedMsg.attachments || []);
+                    });
                 }
             } catch { }
         }
@@ -206,73 +287,11 @@ export default function Chat() {
         return () => window.removeEventListener("scroll", handleScroll);
     }, [onSend, tabId]);
 
-    useEffect(() => {
-        if (eventSourceRef.current) eventSourceRef.current.close();
-        const eventSource = new EventSource(`/api/stream?` + new URLSearchParams({ chat: tabId }).toString());
-        eventSourceRef.current = eventSource;
-
-        let assistantMessage = "";
-        eventSource.onmessage = (event) => {
-            if ("event" in event) {
-                if (event.event === "error") {
-                    setStreamError(event.data || "An error occurred");
-                    setGenerating(false);
-                    return;
-                }
-                if (event.event === "done") {
-                    loadMessagesFromServer(tabId).then(r => {
-                        // If the last message is not a model, update from server
-                        if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
-                            setMessages(r.messages);
-                        }
-                        // Otherwise, keep the current state (preserve partial message)
-                    });
-                    setGenerating(false);
-                    return;
-                }
-            }
-
-            assistantMessage += event.data;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage?.role === "model") {
-                    lastMessage.parts = [{ text: assistantMessage }];
-                    return [...newMessages];
-                } else {
-                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-                }
-            });
-        };
-
-        eventSource.addEventListener("error", (event) => {
-            try {
-                const data = JSON.parse((event as MessageEvent).data);
-                if (data.error === "stream-failure") {
-                    setStreamError(data.message || "Stream failed");
-                }
-            } catch { }
-            eventSource.close();
-            setGenerating(false);
-        });
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            setGenerating(false);
-            // Do not overwrite messages with server messages on error
-        };
-
-        eventSource.addEventListener("done", () => {
-            eventSource.close();
-            setGenerating(false);
-            loadMessagesFromServer(tabId).then(r => {
-                // If the last message is not a model, update from server
-                if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
-                    setMessages(r.messages);
-                }
-                // Otherwise, keep the current state (preserve partial message)
-            });
-        });
+    const reloadMessagesFromServerIfStateInvalid = useCallback(async () => {
+        const serverMessages = await loadMessagesFromServer(tabId);
+        if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
+            setMessages(serverMessages.messages);
+        }
     }, [tabId, messages]);
 
     useEffect(() => {
@@ -361,10 +380,11 @@ export default function Chat() {
                             </>
                         )}
                         {streamError && (
-                            <div className="w-full flex flex-col items-center gap-2 mt-4">
-                                <div className="text-red-500">Message generation failed. You can retry.</div>
+                            <div className="col-span-2 w-full flex flex-col items-start gap-1 mt-4">
+                                <span className="text-red-500">Message generation failed. You can retry.</span>
+                                <span className="text-red-600">Reason: {streamError}</span>
                                 <button
-                                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
+                                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition cursor-pointer mt-2"
                                     onClick={() => {
                                         setStreamError(null);
                                         if (messages.length > 1) handleRegenerate(messages.length - 1);

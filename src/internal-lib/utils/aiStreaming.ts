@@ -6,6 +6,7 @@ import redis from "@/internal-lib/redis";
 import { ApiError } from "../types/api";
 import { join } from "path";
 import { readFile } from "fs/promises";
+import { deleteMessagesFromIndex } from "./messages";
 
 // Helper to load file data for an attachment and return parts to inject
 export async function getAttachmentParts({ userId, chatId, originalName, uploadsDir }: { userId: string, chatId: string, originalName: string, uploadsDir: string }) {
@@ -99,23 +100,25 @@ export async function getAttachmentParts({ userId, chatId, originalName, uploads
     }
 }
 
-export async function doAiResponseInBackground(user: User, message: Message, chatId: string, chat: Chat) {
-    const stream = await chat.sendStream(message);
-    const genResult = await redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 60).catch((err) => {
-        console.error(err);
-        return null;
-    });
-    if (!genResult) {
-        // Shouldn't happen unless a user is naughty and bypasses the GUI.
-        return NextResponse.json({ error: "Failed to set generating state" } as ApiError, { status: 500 })
-    }
-
-    const reader = stream.getReader();
-    // Collect the full response
-    let fullResponse = "";
-
-    const decoder = new TextDecoder("utf-8");
+export async function doAiResponseInBackground(userId: string, message: Message, chatId: string, chat: Chat) {
     try {
+        const stream = await chat.sendStream(message);
+
+        const genResult = await redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 60).catch((err) => {
+            console.error(err);
+            return null;
+        });
+        if (!genResult) {
+            // Shouldn't happen unless a user is naughty and bypasses the GUI.
+            return NextResponse.json({ error: "Failed to set generating state" } as ApiError, { status: 500 })
+        }
+
+        const reader = stream.getReader();
+        // Collect the full response
+        let fullResponse = "";
+
+        const decoder = new TextDecoder("utf-8");
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -160,9 +163,18 @@ export async function doAiResponseInBackground(user: User, message: Message, cha
 
         reader.releaseLock();
     } catch (error) {
+        // delete the last message of chat message keys if it was an error
+        await deleteMessagesFromIndex({
+            fromIndex: -1, // -1 to delete the last message
+            redis,
+            chatId,
+            userId,
+        }).catch((err) => {
+            console.error("Failed to delete last message on error:", err);
+            return [];
+        });
         // Send SSE error event to client before closing
-        const errorMsg = { error: "Stream failure", message: (error as Error).message };
-        await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "error", JSON.stringify(errorMsg)).catch((err) => {
+        await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "error", (error as Error).message).catch((err) => {
             console.error("Failed to send error message to stream:", err);
         });
     } finally {

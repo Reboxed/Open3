@@ -1,5 +1,6 @@
-import { createRedisConnection, MESSAGE_STREAM_KEY } from "@/internal-lib/redis";
-import { ApiError } from "@/internal-lib/types/api";
+import redis, { createRedisConnection, MESSAGE_STREAM_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
+import { ApiError, ChatResponse } from "@/internal-lib/types/api";
+import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -14,26 +15,28 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Chat ID is required" } as ApiError, { status: 400 });
     }
 
+    const user = await currentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+
+    const rawChat = await redis.hget(USER_CHATS_KEY(user.id), chatId);
+    if (!rawChat) return NextResponse.json({ error: "Failed to get chat" } as ApiError, { status: 404 });
+
     const sub = createRedisConnection();
     try {
         const ready = new Promise<void>((resolve, reject) => {
             sub.on("ready", () => {
                 console.log("Redis subscription ready");
+                shouldRun = true;
                 resolve();
             });
             sub.on("error", (err) => {
                 console.error("Redis subscription error:", err);
+                shouldRun = false;
                 reject("Redis subscription error");
             });
         });
         await ready;
-
-        req.signal.addEventListener("abort", () => {
-            console.log("Stream aborted");
-            shouldRun = false;
-            // Clean up the subscription
-            sub.quit();
-        }, { once: true });
 
         const stream = new ReadableStream({
             async start(controller) {
@@ -45,7 +48,10 @@ export async function GET(req: NextRequest) {
                         const res = await sub.xread(
                             "BLOCK", 5000, // 5 seconds max wait to check shouldRun periodically
                             "STREAMS", MESSAGE_STREAM_KEY(chatId), lastId
-                        );
+                        ).catch((err) => {
+                            console.error("Error reading from Redis stream:", err);
+                            return null; // Handle error gracefully
+                        });
 
                         if (!res) continue; // Timeout, no message yet
 
@@ -57,18 +63,18 @@ export async function GET(req: NextRequest) {
                             if (!key) continue; // Skip if no key
 
                             if (key === "done") {
-                                controller.enqueue(encoder.encode("event: done\ndata: \n\n"));
+                                controller.enqueue(encoder.encode("event: stream-done\ndata: DONE\n\n"));
                                 continue;
                             }
                             if (key === "error") {
-                                controller.enqueue(encoder.encode(`event: error\ndata: \n\n`));
+                                controller.enqueue(encoder.encode(`event: stream-error\ndata: ${fields[1]}\n\n`));
                                 continue;
                             }
 
                             // Each massage has a chunk key and a value which is just plain text
                             const message = fields[1];
                             if (!message) continue;
-                            controller.enqueue(encoder.encode(`data: ${message}\n\n`));
+                            controller.enqueue(encoder.encode(`event: stream\ndata: ${message}\n\n`));
                         }
 
                         lastId = messages[messages.length - 1][0]; // Update lastId to the last message ID

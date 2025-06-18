@@ -68,7 +68,7 @@ export async function GET(_: NextRequest) {
 
                         let chat;
                         try {
-                            chat = getChatClass("openrouter", "google/gemini-1.5-flash", messages.slice(0, -2), TITLE_PROMPT, apiKey);
+                            chat = getChatClass("openrouter", "google/gemini-flash-1.5", messages.slice(0, -2), TITLE_PROMPT, apiKey);
                         } catch (e) {
                             return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
                         }

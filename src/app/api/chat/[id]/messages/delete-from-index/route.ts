@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import redis, { CHAT_MESSAGES_KEY, USER_CHATS_KEY, GET_LOOKUP_KEY } from "@/internal-lib/redis";
-import { Message } from "@/app/lib/types/ai";
-import { join } from "path";
-import { unlink, stat } from "fs/promises";
+import redis, { USER_CHATS_KEY } from "@/internal-lib/redis";
 import { ApiError } from "@/internal-lib/types/api";
-
-const uploadsDir = join(process.cwd(), "public", "uploads");
+import { deleteMessagesFromIndex } from "@/internal-lib/utils/messages";
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
@@ -27,36 +23,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!chatExists) {
         return NextResponse.json({ error: "Chat not found" } as ApiError, { status: 404 });
     }
-    
-    let messageStrings: string[] = [];
-    messageStrings = await redis.lrange(CHAT_MESSAGES_KEY(id), 0, -1);
-    const messages: Message[] = messageStrings.map(msgStr => {
-        try { return JSON.parse(msgStr); } catch { return null; }
-    }).filter(Boolean);
-    
-    const keepMessages = messages.slice(0, fromIndex);
-    const toDelete = messages.slice(fromIndex);
-    
-    for (const msg of toDelete) {
-        if (msg.attachments && msg.attachments.length > 0) {
-            for (const att of msg.attachments) {
-                try {
-                    const lookupKey = GET_LOOKUP_KEY(user.userId, id, att.filename);
-                    const fileKey = await redis.get(lookupKey);
-                    if (fileKey) {
-                        const filePath = join(uploadsDir, fileKey);
-                        try { await stat(filePath); await unlink(filePath); } catch {}
-                        try { await stat(filePath + ".meta.json"); await unlink(filePath + ".meta.json"); } catch {}
-                        await redis.del(lookupKey);
-                    }
-                } catch {}
-            }
-        }
-    }
-    
-    await redis.del(CHAT_MESSAGES_KEY(id));
-    if (keepMessages.length > 0) {
-        await redis.rpush(CHAT_MESSAGES_KEY(id), ...keepMessages.map(m => JSON.stringify(m)));
-    }
+
+    const keepMessages = await deleteMessagesFromIndex({
+        fromIndex,
+        redis,
+        chatId: id,
+        userId: user.userId,
+    });
+
     return NextResponse.json({ success: true, messages: keepMessages }, { status: 200 });
 }
