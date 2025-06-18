@@ -4,7 +4,7 @@ FROM node:23.7-bullseye-slim AS builder
 WORKDIR /app
 
 # Install dependencies and build the app
-COPY package.json package-lock.json .env ./
+COPY package.json .env ./
 RUN npm install
 COPY . .
 RUN npm run build
