@@ -53,6 +53,8 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
    docker-compose up -d
    ```
 
+(and then, but optional and only if you're a dev. btw: it'd require you to modify the docker-compose.yml and comment out the production build part to make it not collide)
+
 5. **Run the development server:**
    ```sh
    bun run dev
