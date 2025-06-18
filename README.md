@@ -61,7 +61,7 @@ Chat Palette<br>
 4. **Open in your browser:**
    Visit [http://localhost:3000](http://localhost:3000)
 
-### For Developers
+#### For Developers
 
 5. **Install dependencies:**
    ```sh
