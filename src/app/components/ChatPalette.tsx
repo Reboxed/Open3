@@ -15,13 +15,13 @@ interface ChatPaletteProps {
 }
 
 // Animation duration in ms (should match CSS)
-const DELETE_ANIMATION_DURATION = 350;
+const DELETE_ANIMATION_DURATION = 300;
 
 export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss }: ChatPaletteProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [showLabel, setShowLabel] = useState(true);
     const [hidden, setHidden] = useState(hiddenOuter);
-    const [selected, setSelected] = useState([0, 0]);
+    const [selected, setSelected] = useState<[number, number]>([0, 0]);
     const selectedRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -261,6 +261,16 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }
     }, [hidden, isLoading]);
 
+    // Ref to persist last selected index
+    const lastSelectedRef = useRef<[number, number]>([0, 0]);
+
+    // Save selected index before hiding
+    useEffect(() => {
+        if (hidden) {
+            lastSelectedRef.current = selected;
+        }
+    }, [hidden, selected]);
+
     const onInput: FormEventHandler<HTMLInputElement> = (event) => {
         const value = event.currentTarget.value;
         setShowLabel(!value.length);
@@ -423,6 +433,15 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         )
         : localChats.chats;
 
+    // Restore selected index when showing and chats are loaded
+    useEffect(() => {
+        if (!hidden && filteredChats.length > 0) {
+            const [lastIdx, lastDir] = lastSelectedRef.current;
+            const idx = Math.max(0, Math.min(lastIdx, filteredChats.length - 1));
+            setSelected([idx, lastDir]);
+        }
+    }, [hidden, filteredChats.length]);
+
     // Clamp selected index if filteredChats gets shorter
     useEffect(() => {
         if (selected[0] >= filteredChats.length) {
@@ -480,6 +499,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }
     }, [selected, chatsWithSections, filteredChats?.length, hidden]);
 
+    // Unfocus search input when palette is hidden
+    useEffect(() => {
+        if (hidden && inputRef.current) {
+            inputRef.current.blur();
+        }
+    }, [hidden]);
+
     return (
         <>
             <style>{`
@@ -534,7 +560,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 }
             `}</style>
             <div
-                className={`z-20 bg-black/15 absolute top-0 left-0 right-0 bottom-0 text-transparent select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-350`}
+                className={`z-20 bg-black/15 absolute top-0 left-0 right-0 bottom-0 text-transparent select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-300`}
                 onClick={() => {
                     onDismiss();
                 }}
