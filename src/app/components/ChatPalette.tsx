@@ -53,26 +53,32 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }
     }, [data]);
 
-    // Scroll/selection effect
+    // Scroll/selection effect: keep selected div at bottom if possible
     useEffect(() => {
         const listElement = listRef.current;
-        const chatOverflow = Math.min(5, localChats?.chats?.length);
-        if (listElement) {
-            if (selected[0] >= chatOverflow || listElement.scrollTop >= 60) {
-                const scrollDistance = Math.max(0, selected[0] - chatOverflow + 1) * 64;
-                listElement.scrollTo({
-                    top: scrollDistance,
-                    behavior: "smooth",
-                });
-                // Move the selectedRef div as well
-                if (selectedRef.current) {
-                    selectedRef.current.style.setProperty("--top-pos", Math.max(0, (64 * selected[0])) + "px");
-                }
-            } else {
-                const selectedDiv = selectedRef.current;
-                if (selectedDiv) {
-                    selectedDiv.style.setProperty("--top-pos", Math.max(0, (64 * selected[0])) + "px");
-                }
+        if (!listElement) return;
+
+        const el = chatItemRefs.current[selected[0]];
+        if (el) {
+            const elTop = el.offsetTop;
+            const elHeight = el.offsetHeight;
+            const listHeight = listElement.clientHeight;
+            const listScrollHeight = listElement.scrollHeight;
+
+            // Try to keep the selected item at the bottom if possible
+            // If the selected item fits below the current scroll, scroll so it's at the bottom
+            let targetScrollTop = elTop + elHeight - listHeight;
+            // Clamp to valid scroll range
+            targetScrollTop = Math.max(0, Math.min(targetScrollTop, listScrollHeight - listHeight));
+
+            listElement.scrollTo({
+                top: targetScrollTop,
+                behavior: "smooth",
+            });
+
+            // Move the selectedRef div as well
+            if (selectedRef.current) {
+                selectedRef.current.style.setProperty("--top-pos", `${elTop}px`);
             }
         }
     }, [selected, localChats?.chats?.length]);
