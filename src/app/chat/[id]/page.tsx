@@ -167,6 +167,7 @@ export default function Chat() {
         eventSourceRef.current = eventSource;
 
         const streamDoneEvent = (event: MessageEvent) => {
+            assistantMessage = "";
             reloadMessagesFromServerIfStateInvalid();
             setGenerating(false);
             setRegeneratingIdx(null);
@@ -174,6 +175,7 @@ export default function Chat() {
         eventSource.addEventListener("stream-done", streamDoneEvent);
 
         const streamErrorEvent = (event: MessageEvent) => {
+            assistantMessage = "";
             setStreamError(event.data || "An error occurred");
             setGenerating(false);
         }
@@ -210,13 +212,14 @@ export default function Chat() {
                 }
             } catch { }
             eventSource.close();
+            assistantMessage = "";
             setGenerating(false);
         }, { once: true });
 
         eventSource.addEventListener("done", () => {
-            console.log("Stream done");
             reloadMessagesFromServerIfStateInvalid();
             eventSource.close();
+            assistantMessage = "";
             setGenerating(false);
         }, { once: true });
 

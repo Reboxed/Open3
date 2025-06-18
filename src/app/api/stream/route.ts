@@ -59,24 +59,20 @@ export async function GET(req: NextRequest) {
                         const [_, messages] = res[0];
                         if (!messages || messages.length === 0) continue; // No new messages
 
-                        let shouldDeleteStream = false;
-
                         for (const [_, fields] of messages) {
                             const key = fields[0]; // The first field is the key
                             if (!key) continue; // Skip if no key
                             
                             if (key === "done") {
                                 controller.enqueue(encoder.encode("event: stream-done\ndata: DONE\n\n"));
-                                shouldDeleteStream = true;
                                 continue;
                             }
                             if (key === "error") {
                                 controller.enqueue(encoder.encode(`event: stream-error\ndata: ${fields[1]}\n\n`));
-                                shouldDeleteStream = true;
                                 continue;
                             }
                             
-                            // Each message has a chunk key and a value which is just plain text
+                            // Each massage has a chunk key and a value which is just plain text
                             const message = fields[1];
                             if (!message) continue;
                             // console.log("Received message: " + message.replace(/\n/g, "\\n"));
@@ -84,9 +80,6 @@ export async function GET(req: NextRequest) {
                         }
 
                         lastId = messages[messages.length - 1][0]; // Update lastId to the last message ID
-                        if (shouldDeleteStream) {
-                            await sub.xtrim(streamKey, "MAXLEN", 0);
-                        }
                     }
 
                     controller.close();
