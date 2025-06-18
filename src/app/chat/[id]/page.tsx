@@ -169,6 +169,7 @@ export default function Chat() {
         const streamDoneEvent = (event: MessageEvent) => {
             reloadMessagesFromServerIfStateInvalid();
             setGenerating(false);
+            setRegeneratingIdx(null);
         }
         eventSource.addEventListener("stream-done", streamDoneEvent);
 
@@ -179,9 +180,15 @@ export default function Chat() {
         eventSource.addEventListener("stream-error", streamErrorEvent);
 
         let assistantMessage = "";
-        const streamEvent = (event: MessageEvent) => {
+        eventSource.onmessage = (event) => {
             setGenerating(true);
-            assistantMessage += event.data;
+            // Preserve newlines by replacing explicit \n or handling chunked data
+            let chunk = event.data;
+            // If your backend sends literal "\\n", replace with "\n"
+            chunk = chunk.replace(/\\n/g, "\n");
+            // If backend sends real newlines, this is not needed
+
+            assistantMessage += chunk;
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
@@ -193,7 +200,6 @@ export default function Chat() {
                 }
             });
         }
-        eventSource.addEventListener("stream", streamEvent);
 
         eventSource.addEventListener("error", (event) => {
             console.warn("EventSource error:", event);
@@ -216,7 +222,6 @@ export default function Chat() {
 
         return () => {
             if (eventSourceRef.current) {
-                eventSourceRef.current.removeEventListener("stream", streamEvent);
                 eventSourceRef.current.removeEventListener("stream-done", streamDoneEvent);
                 eventSourceRef.current.removeEventListener("stream-error", streamErrorEvent);
                 eventSourceRef.current.close();

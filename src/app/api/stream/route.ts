@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
                     const streamKey = MESSAGE_STREAM_KEY(chatId);
                     while (shouldRun) {
                         const res = await sub.xread(
-                            "BLOCK", 5000, // 5 seconds max wait to check shouldRun periodically
+                            "BLOCK", 10000, // 10 seconds max wait to check shouldRun periodically
                             "STREAMS", streamKey, lastId
                         ).catch((err) => {
                             console.error("Error reading from Redis stream:", err);
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
                         for (const [_, fields] of messages) {
                             const key = fields[0]; // The first field is the key
                             if (!key) continue; // Skip if no key
-
+                            
                             if (key === "done") {
                                 controller.enqueue(encoder.encode("event: stream-done\ndata: DONE\n\n"));
                                 continue;
@@ -71,11 +71,11 @@ export async function GET(req: NextRequest) {
                                 controller.enqueue(encoder.encode(`event: stream-error\ndata: ${fields[1]}\n\n`));
                                 continue;
                             }
-
+                            
                             // Each massage has a chunk key and a value which is just plain text
                             const message = fields[1];
                             if (!message) continue;
-                            controller.enqueue(encoder.encode(`event: stream\ndata: ${message}\n\n`));
+                            controller.enqueue(encoder.encode(`data: ${message.replace(/\n/g, "\\n")}\n\n`));
                         }
 
                         lastId = messages[messages.length - 1][0]; // Update lastId to the last message ID

@@ -125,11 +125,11 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             const chunkText = decoder.decode(value);
             if (chunkText.startsWith("data: ")) {
                 try {
-                    const text = chunkText.slice(6).replace(/\n\n$/, "");
+                    const text = chunkText.slice(6).replace(/(?:\r?\n){2}$/, "");
                     fullResponse += text;
 
                     // Add the chunk to the Redis stream
-                    redis.xadd(messageStreamKey, "*", "chunk", text).catch((err) => {
+                    await redis.xadd(messageStreamKey, "*", "chunk", text).catch((err) => {
                         console.error(err);
                         return null;
                     });
@@ -174,15 +174,15 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             console.error("Failed to send error message to stream:", err);
         });
     } finally {
+        // Clean the redis stream to prevent duplication
+        await redis.xtrim(messageStreamKey, "MAXLEN", 0).catch((err) => {
+            console.error("Failed to trim message stream:", err);
+        });
+
         // Delete the generating state
         await redis.del(CHAT_GENERATING_KEY(chatId)).catch((err) => {
             // This shouldn't hopefully happen or else i will shoot myself
             console.error(err);
-        });
-
-        // Clean the redis stream to prevent duplication
-        await redis.xtrim(messageStreamKey, "MAXLEN", 0).catch((err) => {
-            console.error("Failed to trim message stream:", err);
         });
     }
 }

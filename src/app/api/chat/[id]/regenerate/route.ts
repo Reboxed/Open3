@@ -102,9 +102,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
     }
 
-    // Store only the original userMessage (no loaded file data) in Redis
-    await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(userMessage));
-
     try {
         if (!chatJson.label) {
             const emitted = eventBus.emit(CHAT_TITLE_GENERATE_EVENT, id, [userMessage.parts[0].text]);
@@ -113,6 +110,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
         }
 
+        // Clean the redis stream to prevent duplication
+        await redis.xtrim(MESSAGE_STREAM_KEY(chatJson.id), "MAXLEN", 0).catch((err) => {
+            console.error("Failed to trim message stream:", err);
+        });
+        
         setImmediate(() => {
             // Run AI response generation in the background
             doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat);
