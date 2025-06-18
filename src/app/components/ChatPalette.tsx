@@ -615,7 +615,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                     const isDeleting = deletingId === chat.id;
                                     const isLongPressing = longPressActive === chat.id;
                                     const createdAt = chat.createdAt ? new Date(chat.createdAt) : new Date();
-                                    const timeLabel = format(createdAt, "mm:HH");
+                                    const timeLabel = format(createdAt, "HH:mm");
                                     return (
                                         <li
                                             key={chat.id}

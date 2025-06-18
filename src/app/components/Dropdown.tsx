@@ -158,6 +158,7 @@ export default function Dropdown({ className, label, items: options, name, optio
     return (
         <div className={`relative w-max ${className}`}>
             <button
+                type="button"
                 id="dropdown"
                 ref={dropdownButtonRef}
                 onClick={toggleDropdown}

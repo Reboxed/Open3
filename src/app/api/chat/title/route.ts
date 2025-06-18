@@ -16,50 +16,46 @@ export async function GET(_: NextRequest) {
     const { requireByok, byok, user } = await getUserApiKeys();
     if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
 
-    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
     let eventListener: ((chatId: string, messages: string[]) => Promise<void>) | null = null;
     const generatingChats = new Set<string>();
     let isClosed = false;
 
     // This stream is kinda not the best but i mean it works just fine 🤷‍♂️
     const stream = new ReadableStream({
-        async start(streamController) {
-            controller = streamController;
-            
+        async start(controller) {
             // Create event listener function
             const eventListener = async (chatId: string, messages: string[]) => {
                 if (isClosed || !controller) return;
                 // Prevent duplicate processing
                 if (generatingChats.has(chatId)) return;
-                generatingChats.add(chatId);
 
                 try {
                     const rawChat = await redis!.hget(USER_CHATS_KEY(user.id), chatId);
+                    if (!rawChat) throw new Error(`Chat ${chatId} not found in Redis`);
                     let rawChatJson: { [key: string]: any } = {};
                     let chat: ChatResponse | null = null;
                     try {
-                        rawChatJson = JSON.parse(rawChatJson.trim());
+                        rawChatJson = JSON.parse(rawChat.trim());
                         chat = rawChat ? {
                             ...rawChatJson as any,
                             id: chatId,
                         } : null;
                     } catch (parseError) {
                         console.error(`Failed to parse chat ${chatId}:`, parseError);
-                        generatingChats.delete(chatId);
-                        return;
-                    }
-                    
-                    if (!chat) {
-                        console.error(`Chat ${chatId} not found`);
-                        generatingChats.delete(chatId);
                         return;
                     }
 
+                    if (!chat) {
+                        console.error(`Chat ${chatId} not found`);
+                        return;
+                    }
+
+                    generatingChats.add(chatId);
                     let fullResponse = "";
                     try {
                         // Send initial event
                         if (!isClosed && controller) {
-                            controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${NEW_TITLE_EVENT}\n\n`));
+                            controller.enqueue(new TextEncoder().encode(`event: ${NEW_TITLE_EVENT}\ndata: ${chatId}\n\n`));
                         }
                         // BYOK enforcement for Gemini
                         const apiKey = getProviderApiKey("openrouter", byok);
@@ -75,28 +71,30 @@ export async function GET(_: NextRequest) {
                         }
 
                         const readableStream = await chat.sendStream({
-                            parts: [{ text: messages[messages.length - 1 ]}],
+                            parts: [{ text: messages[messages.length - 1] }],
                             role: "user",
-                        }, 25);
+                        }, 75);
 
                         const reader = readableStream.getReader();
+                        const decoder = new TextDecoder("utf-8");
+                        const encoder = new TextEncoder();
                         while (true) {
                             if (isClosed || !controller) break;
                             const { done, value } = await reader.read();
                             if (done) break;
 
-                            const text = new TextDecoder().decode(value);
-                            if (text.startsWith("data: ")) {
-                                fullResponse += text.slice(6);
+                            const chunkText = decoder.decode(value);
+                            if (chunkText.startsWith("data: ")) {
+                                const text = chunkText.slice(6).replace(/\n\n$/, "");
+                                fullResponse += text;
                                 try {
-                                    controller.enqueue(new TextEncoder().encode(`data: ${chatId}::${fullResponse}\n\n`));
+                                    controller.enqueue(encoder.encode(`data: ${chatId}::${fullResponse}\n\n`));
                                 } catch (enqueueError) {
                                     console.error(`Failed to enqueue chunk for chat ${chatId}:`, enqueueError);
                                     break;
                                 }
                             }
                         }
-                        reader.releaseLock();
 
                         // Save the final title to Redis
                         const finalTitle = fullResponse.trim() || "Untitled Chat";
@@ -106,7 +104,7 @@ export async function GET(_: NextRequest) {
                         } as ChatResponse));
                     } catch (error) {
                         console.error(`Error generating title for chat ${chatId}:`, error);
-                        
+
                         // Try to save fallback title
                         try {
                             const fallbackTitle = fullResponse.trim() || "Untitled Chat";
@@ -117,7 +115,7 @@ export async function GET(_: NextRequest) {
                         } catch (saveError) {
                             console.error(`Failed to set fallback title for ${chatId}:`, saveError);
                         }
-                    }
+                    } finally { fullResponse = "" }
                 } catch (outerError) {
                     console.error(`Outer error processing chat ${chatId}:`, outerError);
                 } finally {
@@ -127,7 +125,7 @@ export async function GET(_: NextRequest) {
 
             // Add the event listener
             eventBus.on(CHAT_TITLE_GENERATE_EVENT, eventListener);
-            
+
             // Send initial connection confirmation
             try {
                 controller.enqueue(new TextEncoder().encode(`data: connected\n\n`));
@@ -135,7 +133,7 @@ export async function GET(_: NextRequest) {
                 console.error("Failed to send initial connection message:", error);
             }
         },
-        
+
         cancel() {
             // Clean up when stream is cancelled/closed
             isClosed = true;
@@ -148,7 +146,6 @@ export async function GET(_: NextRequest) {
                 eventListener = null;
             }
             generatingChats.clear();
-            controller = null;
             console.log("Title stream connection closed and cleaned up");
         }
     });

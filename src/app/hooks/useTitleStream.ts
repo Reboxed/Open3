@@ -7,11 +7,12 @@ export default function useTitleStream() {
     const [error, setError] = useState<string | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectAttemptsRef = useRef(0);
-    const maxReconnectAttempts = 500;
+    const maxReconnectAttempts = 15;
 
     const connect = () => {
         if (eventSourceRef.current) {
             eventSourceRef.current.close();
+            eventSourceRef.current = null;
         }
 
         const eventSource = new EventSource(`/api/chat/title`);
@@ -23,8 +24,21 @@ export default function useTitleStream() {
             reconnectAttemptsRef.current = 0;
         };
 
+        eventSource.addEventListener(NEW_TITLE_EVENT, (event) => {
+            const chatId = event.data as string | null | undefined;
+            if (!chatId) return;
+            console.log("Received new title event:", chatId);
+            setTitles((prev) => {
+                const titlesCopy = new Map(prev);
+                titlesCopy.set(chatId, "");
+                return titlesCopy;
+            });
+        });
+
         eventSource.onmessage = (event) => {
             const data = event.data as string | null | undefined;
+            console.log("Received title update:", data);
+
             const eventSplit = data?.split("::") || [];
             const chatId = eventSplit[0]?.trim();
             if (!chatId) {
@@ -32,12 +46,7 @@ export default function useTitleStream() {
                 return;
             }
 
-            if (eventSplit[1]?.trim() === NEW_TITLE_EVENT) {
-                setTitles((prev) => prev.set(chatId, ""));
-                return;
-            }
-
-            const title = eventSplit.slice(1).join("::").trim();
+            const title = eventSplit.slice(1).join("::");
             if (title == undefined) {
                 setError("Received empty title from server.");
                 return;

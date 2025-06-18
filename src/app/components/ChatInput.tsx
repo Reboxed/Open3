@@ -141,7 +141,7 @@ export default function ChatInput({ onSend,
     const onSubmitForm = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (generating) return;
-        if (!inputValue.trim() && attachments.length === 0) return;
+        if (!inputValue && attachments.length === 0) return;
         if (!model || !provider) return;
 
         const newContentRaw = onSend?.(inputValue, attachments, model, provider);
@@ -150,13 +150,13 @@ export default function ChatInput({ onSend,
         const input = inputRef.current;
         if (input) {
             input.innerText = newContent ?? "";
-            setInputValue((newContent ?? "").trim());
+            setInputValue((newContent ?? ""));
         }
         setAttachments([]);
     }
 
     const onInput: FormEventHandler<HTMLDivElement> = (e) => {
-        setInputValue(e.currentTarget.innerText.trim());
+        setInputValue(e.currentTarget.innerText);
     }
 
     // Hide attachment button if not supported by selected model
@@ -176,7 +176,7 @@ export default function ChatInput({ onSend,
                             e.preventDefault()
                             const text = e.clipboardData.getData("text/plain");
                             e.currentTarget.innerText = text;
-                            setInputValue(text.trim());
+                            setInputValue(text);
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {

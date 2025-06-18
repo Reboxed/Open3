@@ -162,7 +162,6 @@ export default function Chat() {
         if (eventSourceRef.current) {
             eventSourceRef.current.close();
             eventSourceRef.current = null;
-            return;
         }
         const eventSource = new EventSource(`/api/stream?` + new URLSearchParams({ chat: tabId }).toString());
         eventSourceRef.current = eventSource;

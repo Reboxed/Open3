@@ -156,8 +156,8 @@ export async function doAiResponseInBackground(userId: string, message: Message,
 
         reader.releaseLock();
     } catch (error) {
-        console.error("Error during AI response generation:", error);
-        
+        console.error("Error during AI response generation:", (error as Error).message);
+
         // delete the last message of chat message keys if it was an error
         await deleteMessagesFromIndex({
             fromIndex: -1, // -1 to delete the last message

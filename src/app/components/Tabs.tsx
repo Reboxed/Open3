@@ -202,7 +202,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         className={`
                             flex h-full items-center
                             gap-12 justify-between px-4 pl-5 py-3 min-w-fit
-                            ${tab.permanent ? "!px-[calc((48px+16px)/2)] !max-w-fit" : ""} cursor-pointer rounded-t-2xl font-medium
+                            ${tab.permanent ? "!px-[calc((48px+16px)/2)]" : ""} cursor-pointer rounded-t-2xl font-medium
                             transition-all duration-250
                             ${activeTab == idx ?
                                 `tab-active z-20 ${!tab.permanent ? "text-neutral-200" : "text-primary-light"} !font-bold` :
