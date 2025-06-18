@@ -506,8 +506,8 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
     }, []);
 
     return (
-        <div className="flex flex-col gap-2">
-            <pre className={`${className} flex flex-col !p-1`}>
+        <div className="flex flex-col gap-2 max-w-full overflow-x-auto">
+            <pre className={`${className} flex flex-col !p-1 max-w-full overflow-x-auto whitespace-pre-wrap break-words`} style={{wordBreak: 'break-word', overflowX: 'auto'}}>
                 <div className="bg-white/[0.07] w-full rounded-xl rounded-b-md py-2 px-4 flex gap-4 justify-between items-center">
                     <span className="text-sm font-mono">{language ? language[0].toUpperCase() + language.slice(1) : "Code"}</span>
                     <button
@@ -540,8 +540,8 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
 const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, onDelete?: (idx: number) => void, onRegenerate?: (idx: number) => void, regeneratingIdx?: number | null }) => {
     const isUser = message?.role === "user";
     const className = isUser
-        ? "px-6 py-4 rounded-2xl mb-1 bg-white/[0.06] justify-self-end"
-        : "p-2 mb-1";
+        ? "px-6 py-4 rounded-2xl mb-1 bg-white/[0.06] justify-self-end break-words max-w-full overflow-x-auto"
+        : "p-2 mb-1 break-words max-w-full overflow-x-auto";
 
     const renderedMarkdown = useMemo(() => {
         // Only apply syntax highlighting for model messages
@@ -632,7 +632,7 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
-            <div className={`${className} max-w-full min-w-0`}>
+            <div className={`${className} max-w-full min-w-0`} style={{wordBreak: 'break-word', overflowX: 'auto'}}>
                 {renderedMarkdown}
             </div>
             {message.attachments && message.attachments.length > 0 && (

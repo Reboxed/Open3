@@ -29,7 +29,7 @@ export default async function RootLayout({
     return (
         <html lang="en">
             <ClerkProvider>
-                <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen w-full max-sm:text-sm`}>
+                <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative flex flex-col min-h-screen w-full max-sm:text-sm`}>
                     <Navbar />
                     <main className="w-full min-h-0 flex-1 flex flex-col">
                         {children}

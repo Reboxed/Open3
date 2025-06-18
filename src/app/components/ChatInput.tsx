@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState, useRef, FormEventHandler } from "react";
 import Dropdown from "./Dropdown";
 import { ModelCapabilities } from "../lib/types/ai";
+import { escape as escapeHtml } from "html-escaper";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
 type ChatInputProps = {
@@ -173,10 +174,37 @@ export default function ChatInput({ onSend,
                     <div
                         ref={inputRef} onInput={onInput} onChange={onInput}
                         onPaste={(e) => {
-                            e.preventDefault()
+                            e.preventDefault();
                             const text = e.clipboardData.getData("text/plain");
-                            e.currentTarget.innerText = text;
-                            setInputValue(text);
+                            const formatted = escapeHtml(text.replace(/\t/g, "    "));
+                            const lines = formatted.split("\n");
+                            const fragment = document.createDocumentFragment();
+
+                            lines.forEach((line, idx) => {
+                                if (idx > 0) {
+                                    fragment.appendChild(document.createElement("br"));
+                                }
+                                // Replace spaces with &nbsp; for each line
+                                const span = document.createElement("span");
+                                span.innerHTML = line.replace(/ /g, "&nbsp;");
+                                fragment.appendChild(span);
+                            });
+
+                            const sel = window.getSelection();
+                            if (sel && sel.rangeCount > 0) {
+                                const range = sel.getRangeAt(0);
+                                range.deleteContents();
+                                range.insertNode(fragment);
+
+                                // Move cursor to the end of the inserted content
+                                range.collapse(false);
+                                sel.removeAllRanges();
+                                sel.addRange(range);
+                            }
+
+                            // Scroll to bottom
+                            e.currentTarget.scrollTop = e.currentTarget.scrollHeight;
+                            setInputValue(e.currentTarget.innerText);
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {

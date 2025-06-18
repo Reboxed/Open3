@@ -560,7 +560,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 }
             `}</style>
             <div
-                className={`z-20 bg-black/15 absolute top-0 left-0 right-0 bottom-0 text-transparent select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-300`}
+                className={`z-20 bg-black/15 absolute left-0 right-0 top-0 bottom-0 text-transparent select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-300`}
                 onClick={() => {
                     onDismiss();
                 }}
