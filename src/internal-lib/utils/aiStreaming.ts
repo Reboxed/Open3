@@ -175,7 +175,7 @@ export async function doAiResponseInBackground(userId: string, message: Message,
         });
     } finally {
         // Clean the redis stream to prevent duplication
-        await redis.xdel(messageStreamKey).catch((err) => {
+        await redis.del(messageStreamKey).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
 
