@@ -18,6 +18,17 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Modern UI:** Responsive, accessible, and beautiful interface.
 <!-- - **Robust streams:** You can leave the website, come back or switch between chats and all your progress will be retained! -->
 
+## Screenshots
+
+<img src="https://github.com/user-attachments/assets/c9a6cd07-4538-41ad-a647-053803705d71" width="512" />
+<img src="https://github.com/user-attachments/assets/023dd755-5d9c-4b1b-835f-79dcf6d7faa1" width="512" /><br>
+Chat Palette<br>
+<img src="https://github.com/user-attachments/assets/5dc98f02-83c3-4115-aedc-b7b80072d202" width="512" />
+
+![ezgif-5e212176bf3e47](https://github.com/user-attachments/assets/82dcfb69-fe15-433a-9480-981b1dee3996)
+
+
+
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS
