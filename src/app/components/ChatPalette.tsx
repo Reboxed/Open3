@@ -141,8 +141,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 e.preventDefault();
                 e.stopPropagation();
                 let i = selected[0] + 1;
-                if (i >= localChats.chats.length) {
-                    i = localChats.chats.length - 1 < 0 ? 0 : localChats.chats.length - 1;
+                if (i >= filteredChats.length) {
+                    i = filteredChats.length - 1 < 0 ? 0 : filteredChats.length - 1;
                 }
                 setSelected([i, -1]);
             }
@@ -422,6 +422,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             (chat.label ?? "New Chat").toLowerCase().includes(searchQuery.trim().toLowerCase())
         )
         : localChats.chats;
+
+    // Clamp selected index if filteredChats gets shorter
+    useEffect(() => {
+        if (selected[0] >= filteredChats.length) {
+            setSelected([filteredChats.length > 0 ? filteredChats.length - 1 : 0, 0]);
+        }
+        // Optionally, reset to 0 if list is empty
+    }, [filteredChats.length]);
 
     // Helper to group chats by date section
     function getSectionLabel(date: Date) {
@@ -825,7 +833,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
                                                             <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
                                                             <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
-                                                        </svg>
+                                                </svg>
                                                     </span>
                                                     <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? "scale(1)" : "scale(0)", zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
                                                         {/* Checkmark SVG */}
