@@ -20,14 +20,10 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis-open3:6379
-      # Add any required environment variables here, e.g. API keys
     depends_on:
       - redis
     volumes:
       - upload-data:/app/public/uploads
-    # Uncomment if you want to mount local files for development
-    # volumes:
-    #   - .:/app
 
 volumes:
   redis-data:
