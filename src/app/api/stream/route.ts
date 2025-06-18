@@ -59,10 +59,23 @@ export async function GET(req: NextRequest) {
                         const [_, messages] = res[0];
                         if (!messages || messages.length === 0) continue; // No new messages
 
-                        for (const [_, fields] of messages) {
-                            const key = fields[0]; // The first field is the key
-                            if (!key) continue; // Skip if no key
-                            
+                        // Find the index of the last "done" key in the messages
+                        let lastDoneIndex = -1;
+                        for (let i = messages.length - 1; i >= 0; i--) {
+                            const fields = messages[i][1];
+                            if (fields[0] === "done") {
+                                lastDoneIndex = i;
+                                break;
+                            }
+                        }
+
+                        // Only process messages after the last "done" key (inclusive)
+                        const startIdx = lastDoneIndex >= 0 ? lastDoneIndex : 0;
+                        for (let i = startIdx; i < messages.length; i++) {
+                            const fields = messages[i][1];
+                            const key = fields[0];
+                            if (!key) continue;
+
                             if (key === "done") {
                                 controller.enqueue(encoder.encode("event: stream-done\ndata: DONE\n\n"));
                                 continue;
@@ -71,8 +84,8 @@ export async function GET(req: NextRequest) {
                                 controller.enqueue(encoder.encode(`event: stream-error\ndata: ${fields[1]}\n\n`));
                                 continue;
                             }
-                            
-                            // Each massage has a chunk key and a value which is just plain text
+
+                            // Each message has a chunk key and a value which is just plain text
                             const message = fields[1];
                             if (!message) continue;
                             controller.enqueue(encoder.encode(`data: ${message.replace(/\n/g, "\\n")}\n\n`));
