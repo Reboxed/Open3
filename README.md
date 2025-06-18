@@ -46,7 +46,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 
 3. **Configure environment variables:**
    - Copy `.env.example` to `.env` and fill in your API keys and settings.
-   - The AI API keys are optional **if** REQUIRE_BYOK is true.
+   - The AI API keys are optional **if** REQUIRE_BYOK is true, but Clerk and NEXT_PUBLIC_APP_URL, are 100% required.
 
 4. **Start the project (via Docker):**
    ```sh
