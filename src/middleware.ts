@@ -11,7 +11,7 @@ export default async function middleware(req: NextRequest, event: any) {
 
     // Run Clerk middleware first
     const result = await clerkMiddleware({
-        authorizedParties: ["https://open3.rebxd.com"],
+        authorizedParties: ["https://open3.rebxd.com", "http://localhost:3000"],
     })(req, event);
     
 
