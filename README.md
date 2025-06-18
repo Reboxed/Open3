@@ -18,6 +18,17 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Modern UI:** Responsive, accessible, and beautiful interface.
 <!-- - **Robust streams:** You can leave the website, come back or switch between chats and all your progress will be retained! -->
 
+## Screenshots
+
+<img src="https://github.com/user-attachments/assets/c9a6cd07-4538-41ad-a647-053803705d71" width="512" />
+<img src="https://github.com/user-attachments/assets/023dd755-5d9c-4b1b-835f-79dcf6d7faa1" width="512" /><br>
+Chat Palette<br>
+<img src="https://github.com/user-attachments/assets/5dc98f02-83c3-4115-aedc-b7b80072d202" width="512" />
+
+![ezgif-5e212176bf3e47](https://github.com/user-attachments/assets/82dcfb69-fe15-433a-9480-981b1dee3996)
+
+
+
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS
@@ -39,31 +50,34 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
    git clone https://github.com/Reboxed/Open3.git
    cd open3
    ```
-2. **Install dependencies:**
+
+2. **Configure environment variables:**
+   - Copy `.env.example` to `.env` and fill in your API keys and settings.
+   - The AI API keys are optional **if** REQUIRE_BYOK is true, but Clerk and NEXT_PUBLIC_APP_URL, are 100% required.
+
+3. **Start the project (via Docker):**
+   ```sh
+   docker-compose up -d
+   ```
+
+4. **Open in your browser:**
+   Visit [http://localhost:3000](http://localhost:3000)
+
+#### For Developers
+
+5. **Install dependencies:**
    ```sh
    bun install
    # or
    npm install
    ```
 
-3. **Configure environment variables:**
-   - Copy `.env.example` to `.env` and fill in your API keys and settings.
-   - The AI API keys are optional **if** REQUIRE_BYOK is true.
-
-4. **Start the project (via Docker):**
-   ```sh
-   docker-compose up -d
-   ```
-
-5. **Run the development server:**
+6. **Run the development server:** (you have to modify docker-compose.yml to comment out production build to get just redis running)
    ```sh
    bun run dev
    # or
    npm run dev
    ```
-
-6. **Open in your browser:**
-   Visit [http://localhost:3000](http://localhost:3000)
 
 ## Project Structure
 
