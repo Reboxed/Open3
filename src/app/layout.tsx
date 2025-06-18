@@ -27,7 +27,7 @@ export default async function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
+        <html lang="en" className="dark">
             <ClerkProvider>
                 <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative flex flex-col min-h-screen w-full max-sm:text-sm`}>
                     <Navbar />
