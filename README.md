@@ -64,9 +64,7 @@ Chat Palette<br>
    docker-compose up -d
    ```
 
-(and then, but optional and only if you're a dev. btw: it'd require you to modify the docker-compose.yml and comment out the production build part to make it not collide)
-
-5. **Run the development server:**
+5. **Run the development server:** (optional, only for devs, has to modify docker-compose.yml to comment out production build to get just redis)
    ```sh
    bun run dev
    # or
