@@ -1,6 +1,6 @@
 # Open3
 
-Open3 is a modern, full-stack AI chat application inspired by platforms like ChatGPT, Gemini, and more. Built with Next.js, TypeScript, and Bun, it supports multi-model chat, file uploads, and real-time streaming, with a clean, extensible architecture.
+Open3 is a modern, full-stack AI chat application inspired by platforms like ChatGPT, Gemini, and more — created in connection to the [T3 Chat Cloneathon](https://cloneathon.t3.chat/) (we do not infringe any of T3 Chat's brandings, UIs, assets or copyrights nor are we affiliated with, but not exclusive to, T3, Theo or T3 Chat). Built with Next.js, TypeScript, and Node, it supports multi-model chat, file uploads, and real-time streaming, with a clean, mostly modular architecture.
 
 ## Features
 
@@ -16,6 +16,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **BYOK (Bring Your Own Key):** Securely use your own API keys for supported models.
 - **Extensible:** Modular(-ish?) codebase for easy addition of new models and features.
 - **Modern UI:** Responsive, accessible, and beautiful interface.
+<!-- - **Robust streams:** You can leave the website, come back or switch between chats and all your progress will be retained! -->
 
 ## Tech Stack
 
