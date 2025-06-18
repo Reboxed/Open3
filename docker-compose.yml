@@ -24,7 +24,7 @@ services:
     depends_on:
       - redis
     volumes:
-      - upload-data:/public/uploads
+      - upload-data:/app/public/uploads
     # Uncomment if you want to mount local files for development
     # volumes:
     #   - .:/app
