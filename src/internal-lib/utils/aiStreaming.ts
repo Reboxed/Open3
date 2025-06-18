@@ -132,7 +132,7 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             const chunkText = decoder.decode(value);
             if (chunkText.startsWith("data: ")) {
                 try {
-                    const text = chunkText.slice(6).trim();
+                    const text = chunkText.slice(6).replace(/\n\n$/, "");
                     fullResponse += text;
 
                     // This is probably how not to do it, buuuttttt
@@ -173,6 +173,7 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             console.error("Failed to delete last message on error:", err);
             return [];
         });
+        console.error("Error during AI response generation:", error);
         // Send SSE error event to client before closing
         await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "error", (error as Error).message).catch((err) => {
             console.error("Failed to send error message to stream:", err);

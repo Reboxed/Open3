@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
                     controller.close();
                     if (sub.status == "ready") sub.quit();
                 } catch (err) {
-                    console.error("Error in XREAD loop:", err);
+                    console.warn("Error in XREAD loop:", (err as Error).message);
                     // We do not close the controller here, as we want to keep the stream open for future messages
                 }
             }

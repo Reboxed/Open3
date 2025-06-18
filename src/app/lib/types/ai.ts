@@ -58,9 +58,6 @@ export class OpenRouterChat implements Chat {
                 apiKey: apiKey,
                 baseURL: "https://openrouter.ai/api/v1"
             });
-            if (!apiKey) {
-                throw new Error("No API key provider");
-            }
         }
     }
 

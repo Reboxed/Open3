@@ -35,11 +35,12 @@ export async function GET(_: NextRequest) {
 
                 try {
                     const rawChat = await redis!.hget(USER_CHATS_KEY(user.id), chatId);
+                    let rawChatJson: { [key: string]: any } = {};
                     let chat: ChatResponse | null = null;
-                    
                     try {
+                        rawChatJson = JSON.parse(rawChatJson.trim());
                         chat = rawChat ? {
-                            ...JSON.parse(rawChat),
+                            ...rawChatJson as any,
                             id: chatId,
                         } : null;
                     } catch (parseError) {
@@ -100,7 +101,7 @@ export async function GET(_: NextRequest) {
                         // Save the final title to Redis
                         const finalTitle = fullResponse.trim() || "Untitled Chat";
                         await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
-                            ...chat,
+                            ...rawChatJson,
                             label: finalTitle,
                         } as ChatResponse));
                     } catch (error) {
