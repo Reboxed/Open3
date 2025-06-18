@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "File name or type is missing" } as ApiError, { status: 400 });
         }
         // Validate file type
-        const allowedTypes = ["image/jpeg", "image/png", "image/gif", "application/json", "application/x-yaml", "application/pdf", "application/octet-stream"];
+        const allowedTypes = ["image/jpeg", "image/png", "application/json", "application/x-yaml", "application/pdf", "application/octet-stream"];
         if (!allowedTypes.includes(file.type) && !file.type.startsWith("text/")) {
             return NextResponse.json({ error: "Unsupported file type" } as ApiError, { status: 400 });
         }
