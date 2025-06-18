@@ -9,7 +9,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Real-Time Streaming:** Enjoy instant responses with Server-Sent Events (SSE).
 - **Chat Management:** Create, delete, search, and organize chats with titles and bulk actions.
 - **Tabs:** Your device has "tabs" of the chats you currently want to see, you can switch bettwn them, close them, open them, etc. Helps with organizing especially across devices.
-- **Works well with keyboard:** Command+k (Ctrl+K) for Chat-Palette, Opt+W (Alt+W) for closing a tab, Opt+Tab/Opt+Shift+Tab (Alt+Tab/Alt+Shift+Tab) for switching to the next/previous tab, **in chat palette** shift+backspace or delete key for deleting a chat, enter for entering a chat (and creating a new tab), shift+click for bulk selecting, etc.
+- **Works well with keyboard:** Command+k (Ctrl+K) for Chat-Palette, Opt+W (Alt+W) for closing a tab, Opt+Tab/Opt+Shift+Tab (Alt+Tab/Alt+Shift+Tab) for switching to the next/previous tab, **in chat palette** up/down-arrow to go up/down one element, shift+backspace or delete key for deleting a chat, enter for entering a chat (and creating a new tab), shift+click for bulk selecting, etc.
 - **Message copying/deleting/regenerating**
 - **Syntax highlighting and Markdown**
 - **Works well with touch**
