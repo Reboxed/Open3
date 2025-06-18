@@ -119,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
 
         // Clean the redis stream to prevent duplication
-        await redis.xtrim(MESSAGE_STREAM_KEY(chatJson.id), "MAXLEN", 0).catch((err) => {
+        await redis.xdel(MESSAGE_STREAM_KEY(chatJson.id), "MAXLEN", 0).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
 
