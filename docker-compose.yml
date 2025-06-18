@@ -3,31 +3,34 @@ services:
     image: redis:7.2-alpine
     container_name: redis-open3
     restart: unless-stopped
-    ports:
-     - "6379:6379"
+    # Uncomment this for development to expose Redis port
+    # ports:
+    #  - "6379:6379"
     volumes:
       - redis-data:/data
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
 
-  # web:
-  #   build: .
-  #   container_name: open3-web
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NODE_ENV=production
-  #     - REDIS_URL=redis-open3:6379
-  #     # Add any required environment variables here, e.g. API keys
-  #   depends_on:
-  #     - redis
-  #   volumes:
-  #     - upload-data:/public/uploads
+  # Comment this out if you want to run a development environment locally
+  web:
+    build: .
+    container_name: open3-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis-open3:6379
+      # Add any required environment variables here, e.g. API keys
+    depends_on:
+      - redis
+    volumes:
+      - upload-data:/public/uploads
     # Uncomment if you want to mount local files for development
     # volumes:
     #   - .:/app
 
 volumes:
   redis-data:
-  # upload-data:
+  # Comment this out if you want to run a development environment locally
+  upload-data:
 
