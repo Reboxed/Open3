@@ -1,3 +1,5 @@
+// TODO: Merge the regenerate and send routes files
+
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import redis, { USER_CHATS_KEY, CHAT_MESSAGES_KEY, CHAT_GENERATING_KEY, MESSAGE_STREAM_KEY } from "@/internal-lib/redis";
@@ -61,6 +63,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return JSON.parse(msgStr);
         } catch { return null }
     }).filter(Boolean);
+
+    // For each message with attachments, reload file data from disk and inject into parts
+    // for (const msg of existingMessages) {
+    //     if (msg.attachments && msg.attachments.length > 0) {
+    //         for (const attachment of msg.attachments) {
+    //             if (!attachment.filename) continue;
+    //             const parts = await getAttachmentParts({ userId: user.id, chatId: id, originalName: attachment.filename, uploadsDir });
+    //             if (!msg.parts) msg.parts = [];
+    //             msg.parts.push(...parts);
+    //         }
+    //     }
+    // }
 
     const chatModel = requestedModel || chatJson.model;
     const chatProvider = requestedProvider || chatJson.provider;
@@ -128,6 +142,80 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             message: "AI response generation started",
             chatId: chatJson.id,
         }, { status: 200 });
+
+        // const stream = await chat.sendStream(runtimeUserMessage);
+        // const genResult = await redis.set(CHAT_GENERATING_KEY(chatJson.id), "1", "EX", 60).catch((err) => {
+        //     console.error(err);
+        //     return null;
+        // });
+        // if (!genResult) {
+        //     // Shouldn't happen unless a user is naughty and bypasses the GUI.
+        //     return NextResponse.json({ error: "Failed to set generating state" } as ApiError, { status: 500 })
+        // }
+
+        // Create a custom readable stream that also saves the AI response
+        // const transformedStream = new ReadableStream({
+        //     async start(controller) {
+        //         const reader = stream.getReader();
+        //         let fullResponse = "";
+
+        //         try {
+        //             while (true) {
+        //                 const { done, value } = await reader.read();
+        //                 if (done) break;
+
+        //                 redis.set(CHAT_GENERATING_KEY(chatJson.id), "1", "EX", 60).catch((err) => {
+        //                     console.error(err);
+        //                     return null;
+        //                 });
+
+        //                 // Parse the chunk to extract the text
+        //                 const chunkText = new TextDecoder().decode(value);
+        //                 if (chunkText.startsWith("data: ")) {
+        //                     try {
+        //                         fullResponse += chunkText.slice(6).trim();
+        //                     } catch (e) {
+        //                         // Idk what would trigger this, but just in case
+        //                         console.error("Failed to parse chunk text:", e);
+        //                     }
+        //                 }
+
+        //                 controller.enqueue(value);
+        //             }
+
+        //             // Save AI response to Redis
+        //             if (fullResponse) {
+        //                 const aiMessage: Message = {
+        //                     role: "model",
+        //                     parts: [{ text: fullResponse }]
+        //                 };
+        //                 await redis.rpush(CHAT_MESSAGES_KEY(id), JSON.stringify(aiMessage));
+        //             }
+
+        //             reader.releaseLock();
+        //             controller.close();
+        //         } catch (error) {
+        //             console.error(error);
+        //             // Send SSE error event to client before closing
+        //             const errorMsg = JSON.stringify({ error: "stream-failure", message: (error as Error).message });
+        //             controller.enqueue(new TextEncoder().encode(`event: error\ndata: ${errorMsg}\n\n`));
+        //             controller.error(error);
+        //         } finally {
+        //             await redis.del(CHAT_GENERATING_KEY(chatJson.id)).catch((err) => {
+        //                 // This shouldn't hopefully happen or else i will shoot myself
+        //                 console.error(err);
+        //             });
+        //         }
+        //     }
+        // });
+
+        // return new Response(transformedStream, {
+        //     headers: {
+        //         "Content-Type": "text/event-stream",
+        //         "Cache-Control": "no-cache, no-transform",
+        //         "Connection": "keep-alive",
+        //     },
+        // });
     } catch (error) {
         console.error("Error during chat generation:", error);
         return NextResponse.json({ error: "Failed to generate content", details: (error as Error).message } as ApiError, { status: 500 });

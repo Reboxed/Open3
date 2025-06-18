@@ -32,6 +32,8 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 
 ### Installation
 
+**WARNING: THIS APP IS NOT COMPAtIBLE WITH SERVERLESS ENVIRONMENTS LIKE VERCEL OR NETLIFY. THIS HANDLING IS COMING LATER.**
+
 1. **Clone the repository:**
    ```sh
    git clone https://github.com/Reboxed/Open3.git

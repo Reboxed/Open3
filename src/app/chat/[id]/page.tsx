@@ -83,61 +83,80 @@ export default function Chat() {
         }
     }, [messages, messagesLoading, autoScroll]);
 
-    const onSend = useCallback((message: string, attachments: { url: string; filename: string }[] = []) => {
+    const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = []) => {
         // Add user message optimistically to UI
         const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
         setMessages(prev => [...prev, userMessage]);
         setGenerating(true);
 
-        if (eventSourceRef.current) eventSourceRef.current.close();
-        const attachmentsParam = attachments.length > 0 ? `&attachments=${encodeURIComponent(JSON.stringify(attachments))}` : "";
-        const eventSource = new EventSource(`/api/chat/${tabId}/send?prompt=${encodeURIComponent(message)}${attachmentsParam}`);
-        eventSourceRef.current = eventSource;
-
-        let assistantMessage = "";
-        eventSource.onmessage = (event) => {
-            assistantMessage += event.data;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage?.role === "model") {
-                    lastMessage.parts = [{ text: assistantMessage }];
-                    return [...newMessages];
-                } else {
-                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-                }
-            });
-        };
-
-        eventSource.addEventListener("error", (event) => {
-            try {
-                const data = JSON.parse((event as MessageEvent).data);
-                if (data.error === "stream-failure") {
-                    setStreamError(data.message || "Stream failed");
-                }
-            } catch { }
-            eventSource.close();
+        const response = await fetch(`/api/chat/${tabId}/send`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                prompt: message,
+                attachments: attachments.length > 0 ? attachments : undefined,
+            }),
+        }).catch(() => {
             setGenerating(false);
+            setStreamError("Failed to send message");
+            return;
         });
 
-        eventSource.onerror = () => {
-            eventSource.close();
+        if (!response || !response.ok) {
             setGenerating(false);
-            // Do not overwrite messages with server messages on error
-        };
+            setStreamError("Failed to send message");
+            return;
+        }
+    }, [tabId]);
 
-        eventSource.addEventListener("done", () => {
-            eventSource.close();
-            setGenerating(false);
-            loadMessagesFromServer(tabId).then(r => {
-                // If the last message is not a model, update from server
-                if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
-                    setMessages(r.messages);
-                }
-                // Otherwise, keep the current state (preserve partial message)
+    // Regenerate handler for LLM responses
+    const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
+    const handleRegenerate = useCallback(async (idx: number) => {
+        setRegeneratingIdx(idx);
+        const deleteRes = await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" })
+            .catch(() => {
+                setRegeneratingIdx(null);
+                setStreamError("Failed to delete message for regeneration");
+                return;
             });
+        if (!deleteRes || !deleteRes.ok) {
+            setRegeneratingIdx(null);
+            setStreamError("Failed to delete message for regeneration");
+            return;
+        }
+
+        const prevUserMsg = messages[idx - 1];
+        if (!prevUserMsg || (prevUserMsg?.role) !== "user") {
+            setRegeneratingIdx(null);
+            return;
+        }
+
+        const response = await fetch(`/api/chat/${tabId}/send`, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        }).catch(() => {
+            setRegeneratingIdx(null);
+            setStreamError("Failed to regenerate message");
+            return;
         });
-    }, [tabId, setMessages, setGenerating, setStreamError, messages]);
+
+        if (!response || !response.ok) {
+            setRegeneratingIdx(null);
+            setStreamError("Failed to regenerate message");
+            return;
+        }
+
+        // Now delete the messages after sending the request on the view
+        setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages.splice(idx, 1); // Remove the model message at idx
+            return newMessages;
+        });
+    }, [messages, tabId]);
 
     useEffect(() => {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
@@ -188,6 +207,75 @@ export default function Chat() {
     }, [onSend, tabId]);
 
     useEffect(() => {
+        if (eventSourceRef.current) eventSourceRef.current.close();
+        const eventSource = new EventSource(`/api/stream?` + new URLSearchParams({ chat: tabId }).toString());
+        eventSourceRef.current = eventSource;
+
+        let assistantMessage = "";
+        eventSource.onmessage = (event) => {
+            if ("event" in event) {
+                if (event.event === "error") {
+                    setStreamError(event.data || "An error occurred");
+                    setGenerating(false);
+                    return;
+                }
+                if (event.event === "done") {
+                    loadMessagesFromServer(tabId).then(r => {
+                        // If the last message is not a model, update from server
+                        if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
+                            setMessages(r.messages);
+                        }
+                        // Otherwise, keep the current state (preserve partial message)
+                    });
+                    setGenerating(false);
+                    return;
+                }
+            }
+
+            assistantMessage += event.data;
+            setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage?.role === "model") {
+                    lastMessage.parts = [{ text: assistantMessage }];
+                    return [...newMessages];
+                } else {
+                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
+                }
+            });
+        };
+
+        eventSource.addEventListener("error", (event) => {
+            try {
+                const data = JSON.parse((event as MessageEvent).data);
+                if (data.error === "stream-failure") {
+                    setStreamError(data.message || "Stream failed");
+                }
+            } catch { }
+            eventSource.close();
+            setGenerating(false);
+        });
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            setGenerating(false);
+            // Do not overwrite messages with server messages on error
+        };
+
+        eventSource.addEventListener("done", () => {
+            eventSource.close();
+            setGenerating(false);
+            loadMessagesFromServer(tabId).then(r => {
+                // If the last message is not a model, update from server
+                if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
+                    setMessages(r.messages);
+                }
+                // Otherwise, keep the current state (preserve partial message)
+            });
+        });
+    }, [tabId, messages]);
+
+    useEffect(() => {
         if (autoScroll) {
             setTimeout(() => {
                 const event = new Event("scroll");
@@ -199,40 +287,6 @@ export default function Chat() {
     function handleStopAutoScroll() {
         setAutoScroll(false);
     }
-
-    // Regenerate handler for LLM responses
-    const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
-    const handleRegenerate = useCallback(async (idx: number) => {
-        setRegeneratingIdx(idx);
-        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
-
-        const prevUserMsg = messages[idx - 1];
-        if (!prevUserMsg || (prevUserMsg?.role) !== "user") {
-            setRegeneratingIdx(null);
-            return;
-        }
-
-        const eventSource = new EventSource(`/api/chat/${tabId}/regenerate?fromIndex=${idx}`);
-        let assistantMessage = "";
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            assistantMessage += data.candidates[0].content.parts[0].text;
-            setMessages(prev => {
-                const newMessages = prev.slice(0, idx);
-                return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-            });
-        };
-        eventSource.onerror = () => {
-            eventSource.close();
-            setRegeneratingIdx(null);
-            loadMessagesFromServer(tabId).then((r) => setMessages(r.messages));
-        };
-        eventSource.addEventListener("done", () => {
-            eventSource.close();
-            setRegeneratingIdx(null);
-            loadMessagesFromServer(tabId).then((r) => setMessages(r.messages));
-        });
-    }, [messages, tabId]);
 
     async function handleDeleteMessage(idx: number) {
         if (idx === 0) {

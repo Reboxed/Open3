@@ -34,7 +34,7 @@
         "**/*.tsx",
         ".next/types/**/*.ts",
         "src/internal-lib/cleanupOrphanedFiles.ts.old"
-    ],
+, "src/app/api/chat/[id]/send/route copy.ts.old"    ],
     "exclude": [
         "node_modules"
     ]
