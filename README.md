@@ -9,7 +9,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Real-Time Streaming:** Enjoy instant responses with Server-Sent Events (SSE).
 - **Chat Management:** Create, delete, search, and organize chats with titles and bulk actions.
 - **Tabs:** Your device has "tabs" of the chats you currently want to see, you can switch bettwn them, close them, open them, etc. Helps with organizing especially across devices.
-- **Works well with keyboard:** Command+k (Ctrl+K) for Chat-Palette, Opt+W (Alt+W) for closing a tab, Opt+Tab/Opt+Shift+Tab (Alt+Tab/Alt+Shift+Tab) for switching to the next/previous tab, **in chat palette** up/down-arrow to go up/down one element, shift+backspace or delete key for deleting a chat, enter for entering a chat (and creating a new tab), shift+click for bulk selecting, etc.
+- **Works well with keyboard:** Shortcuts below!
 - **Message copying/deleting/regenerating**
 - **Syntax highlighting and Markdown**
 - **Works well with touch**
@@ -27,7 +27,20 @@ Chat Palette<br/>
 
 ![ezgif-5e212176bf3e47](https://github.com/user-attachments/assets/82dcfb69-fe15-433a-9480-981b1dee3996)
 
+## (Keyboard) Shortcuts
 
+- Global
+  - CMD/CTRL+K (Chat Palette/Search)
+  - OPT/ALT+TAB (Next tab)
+  - OPT/ALT+SHIFT+TAB (Prev tab)
+- In-chat
+  - OPT/ALT+W (Close tab)
+- Chat Palette
+  - Shift+Backspace / DELETE (Delete chat)
+  - Shift+Click / Touch: Press and Hold (Bulk select)
+  - Enter (When in delete mode: Confirm delete chat, otherwise: Open chat)
+  - Typing (Search)
+  - ESC (Close)
 
 ## Tech Stack
 
