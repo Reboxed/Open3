@@ -48,31 +48,34 @@ Chat Palette<br>
    git clone https://github.com/Reboxed/Open3.git
    cd open3
    ```
-2. **Install dependencies:** (this is optional if you're just going to run it in Docker)
+
+2. **Configure environment variables:**
+   - Copy `.env.example` to `.env` and fill in your API keys and settings.
+   - The AI API keys are optional **if** REQUIRE_BYOK is true, but Clerk and NEXT_PUBLIC_APP_URL, are 100% required.
+
+3. **Start the project (via Docker):**
+   ```sh
+   docker-compose up -d
+   ```
+
+4. **Open in your browser:**
+   Visit [http://localhost:3000](http://localhost:3000)
+
+### For Developers
+
+5. **Install dependencies:**
    ```sh
    bun install
    # or
    npm install
    ```
 
-3. **Configure environment variables:**
-   - Copy `.env.example` to `.env` and fill in your API keys and settings.
-   - The AI API keys are optional **if** REQUIRE_BYOK is true, but Clerk and NEXT_PUBLIC_APP_URL, are 100% required.
-
-4. **Start the project (via Docker):**
-   ```sh
-   docker-compose up -d
-   ```
-
-5. **Run the development server:** (optional, only for devs, has to modify docker-compose.yml to comment out production build to get just redis)
+6. **Run the development server:** (you have to modify docker-compose.yml to comment out production build to get just redis running)
    ```sh
    bun run dev
    # or
    npm run dev
    ```
-
-6. **Open in your browser:**
-   Visit [http://localhost:3000](http://localhost:3000)
 
 ## Project Structure
 
