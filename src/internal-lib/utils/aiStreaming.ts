@@ -1,5 +1,4 @@
 import { Chat, Message } from "@/app/lib/types/ai";
-import { User } from "@clerk/nextjs/server";
 import { CHAT_GENERATING_KEY, CHAT_MESSAGES_KEY, GET_LOOKUP_KEY, MESSAGE_STREAM_KEY, USER_FILES_KEY } from "../redis";
 import { NextResponse } from "next/server";
 import redis from "@/internal-lib/redis";
@@ -101,15 +100,15 @@ export async function getAttachmentParts({ userId, chatId, originalName, uploads
 }
 
 export async function doAiResponseInBackground(userId: string, message: Message, chatId: string, chat: Chat) {
+    const messageStreamKey = MESSAGE_STREAM_KEY(chatId);
     try {
         const stream = await chat.sendStream(message);
 
-        const genResult = await redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 60).catch((err) => {
+        const genResult = await redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 2 * 60 * 60).catch((err) => {
             console.error(err);
             return null;
         });
         if (!genResult) {
-            // Shouldn't happen unless a user is naughty and bypasses the GUI.
             return NextResponse.json({ error: "Failed to set generating state" } as ApiError, { status: 500 })
         }
 
@@ -118,15 +117,9 @@ export async function doAiResponseInBackground(userId: string, message: Message,
         let fullResponse = "";
 
         const decoder = new TextDecoder("utf-8");
-
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-
-            redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 60).catch((err) => {
-                console.error(err);
-                return null;
-            });
 
             // Parse the chunk to extract the text
             const chunkText = decoder.decode(value);
@@ -136,7 +129,7 @@ export async function doAiResponseInBackground(userId: string, message: Message,
                     fullResponse += text;
 
                     // Add the chunk to the Redis stream
-                    redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "chunk", text).catch((err) => {
+                    redis.xadd(messageStreamKey, "*", "chunk", text).catch((err) => {
                         console.error(err);
                         return null;
                     });
@@ -156,13 +149,15 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             await redis.rpush(CHAT_MESSAGES_KEY(chatId), JSON.stringify(aiMessage));
         }
 
-        await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "done", "DONE").catch((err) => {
+        await redis.xadd(messageStreamKey, "*", "done", "DONE").catch((err) => {
             console.error("Failed to send done message to stream:", err);
             return null;
         });
 
         reader.releaseLock();
     } catch (error) {
+        console.error("Error during AI response generation:", error);
+        
         // delete the last message of chat message keys if it was an error
         await deleteMessagesFromIndex({
             fromIndex: -1, // -1 to delete the last message
@@ -173,9 +168,9 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             console.error("Failed to delete last message on error:", err);
             return [];
         });
-        console.error("Error during AI response generation:", error);
+
         // Send SSE error event to client before closing
-        await redis.xadd(MESSAGE_STREAM_KEY(chatId), "*", "error", (error as Error).message).catch((err) => {
+        await redis.xadd(messageStreamKey, "*", "error", (error as Error).message).catch((err) => {
             console.error("Failed to send error message to stream:", err);
         });
     } finally {
@@ -185,8 +180,8 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             console.error(err);
         });
 
-        // Clean the redis stream to prevent duplicates
-        await redis.xtrim(MESSAGE_STREAM_KEY(chatId), "MAXLEN", 0).catch((err) => {
+        // Clean the redis stream to prevent duplication
+        await redis.xtrim(messageStreamKey, "MAXLEN", 0).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
     }
