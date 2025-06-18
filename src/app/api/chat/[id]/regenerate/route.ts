@@ -111,7 +111,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         // Clean the redis stream to prevent duplication
-        await redis.del(MESSAGE_STREAM_KEY(chatJson.id)).catch((err) => {
+        await redis.xtrim(MESSAGE_STREAM_KEY(chatJson.id), "MAXLEN", 0).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
         
