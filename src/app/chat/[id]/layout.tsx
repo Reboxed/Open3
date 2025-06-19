@@ -16,8 +16,8 @@ async function fetchModelProvider(chatId: string) {
   };
 }
 
-export default async function ChatLayout({ children, params }: { children: React.ReactNode, params: { id: string } }) {
-  const { model, provider } = await fetchModelProvider(params.id);
+export default async function ChatLayout({ children, params }: { children: React.ReactNode, params: Promise<{ id: string }> }) {
+  const { model, provider } = await fetchModelProvider((await params).id);
 
   if (!model || !provider) {
     return (
