@@ -43,11 +43,13 @@ Chat Palette<br/>
   - Typing (Search)
   - ESC (Close)
 
-### For the judges: Added within the additional 24 hour period for updating our submission
+### For the judges: I added the following within the additional 24 hour period for updating our submission
 
 1. Web Search. If you want to judge without it then pull the commit [`559d501`](https://github.com/Reboxed/Open3/tree/559d50181aacf4a8ec0cad8f6655b84bdf7c27aa) instead.
 
 <img width="927" alt="image" src="https://github.com/user-attachments/assets/8648aa1e-8a39-46e9-b64d-617ce81d1258" />
+
+Idk if I misunderstood it but if I did then I at least got you guys covered (I would've probably added web search either way, I loved working on this project).
 
 ## Tech Stack
 
