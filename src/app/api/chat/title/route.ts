@@ -7,6 +7,7 @@ import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 import { currentUser } from "@clerk/nextjs/server";
+import { ChunkResponse } from "@/app/lib/types/ai";
 
 
 export async function GET(_: NextRequest) {
@@ -18,16 +19,20 @@ export async function GET(_: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
     const { requireByok, byok } = await getUserApiKeys(user);
+    console.log()
 
-    let eventListener: ((chatId: string, messages: string[]) => Promise<void>) | null = null;
+    let eventListener: (chatId: string, messages: string[]) => Promise<void>;
     const generatingChats = new Set<string>();
     let isClosed = false;
 
     // This stream is kinda not the best but i mean it works just fine 🤷‍♂️
     const stream = new ReadableStream({
         async start(controller) {
+            const decoder = new TextDecoder();
+            const encoder = new TextEncoder();
+
             // Create event listener function
-            const eventListener = async (chatId: string, messages: string[]) => {
+            eventListener = async (chatId: string, messages: string[]) => {
                 chatId = chatId.trim();
                 if (isClosed || !controller) return;
                 // Prevent duplicate processing
@@ -42,10 +47,12 @@ export async function GET(_: NextRequest) {
                     for (let attempt = 1; attempt <= 3; attempt++) {
                         rawChat = await redis.hget(USER_CHATS_KEY(user.id), chatId);
                         if (rawChat) break;
-                        if (attempt < 3) await new Promise(res => setTimeout(res, 500));
+                        if (attempt < 3) await new Promise(res => setTimeout(res, 1000));
                     }
-                    if (!rawChat) throw new Error(`Chat ${chatId} not found in Redis after 3 attempts`);
-
+                    if (!rawChat) {
+                        controller.enqueue(encoder.encode(`event: error\ndata: Chat ${chatId} not found after 3 attempts\n\n`));
+                        return;
+                    }
                     let rawChatJson: { [key: string]: any } = {};
                     let chat: ChatResponse | null = null;
                     try {
@@ -55,12 +62,12 @@ export async function GET(_: NextRequest) {
                             id: chatId,
                         } : null;
                     } catch (parseError) {
-                        console.error(`Failed to parse chat ${chatId}:`, parseError);
+                        controller.enqueue(encoder.encode(`event: error\ndata: Failed to parse chat ${chatId}\n\n`));
                         return;
                     }
-
                     if (!chat) {
                         console.error(`Chat ${chatId} not found`);
+                        controller.enqueue(encoder.encode(`event: error\ndata: Chat ${chatId} not found\n\n`));
                         return;
                     }
 
@@ -69,7 +76,7 @@ export async function GET(_: NextRequest) {
                     try {
                         // Send initial event
                         if (!isClosed && controller) {
-                            controller.enqueue(new TextEncoder().encode(`event: ${NEW_TITLE_EVENT}\ndata: ${chatId}\n\n`));
+                            controller.enqueue(encoder.encode(`event: ${NEW_TITLE_EVENT}\ndata: ${chatId}\n\n`));
                         }
                         // BYOK enforcement for Gemini
                         const apiKey = getProviderApiKey("openrouter", byok);
@@ -81,7 +88,8 @@ export async function GET(_: NextRequest) {
                         try {
                             chat = getChatClass("openrouter", "google/gemini-flash-1.5", messages.slice(0, -2), TITLE_PROMPT, apiKey);
                         } catch (e) {
-                            return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
+                            controller.enqueue(encoder.encode(`event: error\ndata: Unsupported chat provider\n\n`));
+                            return;
                         }
 
                         const readableStream = await chat.sendStream({
@@ -90,23 +98,25 @@ export async function GET(_: NextRequest) {
                         }, false, 75);
 
                         const reader = readableStream.getReader();
-                        const decoder = new TextDecoder("utf-8");
-                        const encoder = new TextEncoder();
                         while (true) {
                             if (isClosed || !controller) break;
                             const { done, value } = await reader.read();
                             if (done) break;
 
-                            const chunkText = decoder.decode(value);
-                            if (chunkText.startsWith("data: ")) {
-                                const text = chunkText.slice(6).replace(/\n\n$/, "");
-                                fullResponse += text;
+                            // Parse the chunk to extract the text
+                            const chunk = decoder.decode(value);
+                            try {
+                                const parsed = JSON.parse(chunk) as ChunkResponse;
+                                fullResponse += parsed.content;
                                 try {
                                     controller.enqueue(encoder.encode(`data: ${chatId}::${fullResponse}\n\n`));
                                 } catch (enqueueError) {
                                     console.error(`Failed to enqueue chunk for chat ${chatId}:`, enqueueError);
                                     break;
                                 }
+                            } catch (e) {
+                                // Idk what would trigger this, but just in case
+                                console.error("Failed to parse chunk text:", e);
                             }
                         }
 
@@ -131,7 +141,8 @@ export async function GET(_: NextRequest) {
                         }
                     } finally { fullResponse = "" }
                 } catch (outerError) {
-                    console.error(`Outer error processing chat ${chatId}:`, outerError);
+                    controller.enqueue(encoder.encode(`event: error\ndata: Failed to process chat ${chatId}\n\n`));
+                    // console.error(`Outer error processing chat ${chatId}:`, outerError);
                 } finally {
                     generatingChats.delete(chatId);
                 }
@@ -139,13 +150,6 @@ export async function GET(_: NextRequest) {
 
             // Add the event listener
             eventBus.on(CHAT_TITLE_GENERATE_EVENT, eventListener);
-
-            // Send initial connection confirmation
-            try {
-                controller.enqueue(new TextEncoder().encode(`data: connected\n\n`));
-            } catch (error) {
-                console.error("Failed to send initial connection message:", error);
-            }
         },
 
         cancel() {
@@ -157,7 +161,6 @@ export async function GET(_: NextRequest) {
                 } catch (error) {
                     console.error("Failed to remove event listener:", error);
                 }
-                eventListener = null;
             }
             generatingChats.clear();
             console.log("Title stream connection closed and cleaned up");
