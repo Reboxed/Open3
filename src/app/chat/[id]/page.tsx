@@ -84,14 +84,14 @@ export default function Chat() {
     }, [messages, messagesLoading, autoScroll]);
 
     const localGenerating = useRef(generating);
-    const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = [], search: boolean) => {
+    const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = [], search: boolean, model: string, provider: string) => {
         // Add user message optimistically to UI
         const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
         setMessages(prev => [...prev, userMessage]);
         localGenerating.current = true;
         setGenerating(true);
 
-        const response = await fetch(`/api/chat/${tabId}/send`, {
+        const response = await fetch(`/api/chat/${tabId}/send?${new URLSearchParams({ model, provider }).toString()}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -279,7 +279,7 @@ export default function Chat() {
                     setInitialSearch(!!parsedMsg.search);
                     sessionStorage.removeItem("temp-new-tab-msg");
                     waitUntilEventSource.then(() => {
-                        onSend(parsedMsg.message, parsedMsg.attachments || [], parsedMsg.search || false);
+                        onSend(parsedMsg.message, parsedMsg.attachments || [], parsedMsg.search || false, "", "");
                     });
                 }
             } catch { }
@@ -456,8 +456,8 @@ export default function Chat() {
                         className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
                         model={model}
                         provider={provider}
-                        isModelFixed
                         initialSearch={initialSearch}
+                        alignment="bottom"
                     />
                 </div>
             </Protect>
@@ -468,7 +468,7 @@ export default function Chat() {
                         <span className="mb-3 text-neutral-300">Inference is expensive, I couldn&apos;t manage to in-time make Open3 accessible to everyone with an additional paid plan in the time frame of the hackathon. But I am dedicated to refactoring this project after the hackathon, adding more features and bringing it online!</span>
                         <ChatInput
                             className={`w-full opacity-35 pointer-events-none overflow-clip`}
-                            isModelFixed
+                            alignment="bottom"
                         />
                     </div>
                 </div>
@@ -497,7 +497,7 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
 
     const handleCopyCode = async () => {
         if (copiedCode) return;
-        
+
         // Not fast, not good, but it works
         // FIXME: This is a temporary solution to extract text from React children
         try {
@@ -543,7 +543,7 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
 
     return (
         <div className="flex flex-col gap-2 max-w-full overflow-x-auto">
-            <pre className={`${className} flex flex-col !p-1 max-w-full overflow-x-auto whitespace-pre-wrap break-words`} style={{wordBreak: 'break-word', overflowX: 'auto'}}>
+            <pre className={`${className} flex flex-col !p-1 max-w-full overflow-x-auto whitespace-pre-wrap break-words`} style={{ wordBreak: 'break-word', overflowX: 'auto' }}>
                 <div className="bg-white/[0.07] w-full rounded-xl rounded-b-md py-2 px-4 flex gap-4 justify-between items-center">
                     <span className="text-sm font-mono">{language ? language[0].toUpperCase() + language.slice(1) : "Code"}</span>
                     <button
@@ -674,7 +674,7 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
-            <div className={`${className} max-w-full min-w-0`} style={{wordBreak: 'break-word', overflowX: 'auto'}}>
+            <div className={`${className} max-w-full min-w-0`} style={{ wordBreak: 'break-word', overflowX: 'auto' }}>
                 {renderedMarkdown}
                 {/* Annotations rendering */}
                 {message.parts && message.parts[0]?.annotations && message.parts[0].annotations.length > 0 && (
@@ -684,9 +684,9 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                                 <span
                                     key={i}
                                     className="inline-block bg-blue-900/60 hover:bg-blue-800  transition-all duration-250 text-blue-200 text-xs px-2 py-1 rounded-md border border-blue-400/30 max-w-xs truncate"
-                                    title={annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i+1}`}
+                                    title={annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i + 1}`}
                                 >
-                                    {annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i+1}`}
+                                    {annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i + 1}`}
                                 </span>
                             </a>
                         ))}

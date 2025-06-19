@@ -68,6 +68,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const chatModel = requestedModel || chatJson.model;
     const chatProvider = requestedProvider || chatJson.provider;
 
+    if (requestedModel !== chatJson.model || requestedProvider !== chatJson.provider) {
+        // If the requested model or provider does not match the chat's model/provider, update the chat
+        const chatCopy = Object.assign({}, chatJson as any);
+        chatCopy.model = chatModel;
+        chatCopy.provider = chatProvider;
+        delete chatCopy.id;
+        await redis.hset(USER_CHATS_KEY(user.id), id, JSON.stringify(chatCopy));
+    }
+
     // BYOK enforcement
     const apiKey = getProviderApiKey(chatProvider, byok);
     if (requireByok && !apiKey) {

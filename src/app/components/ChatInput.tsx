@@ -19,6 +19,7 @@ type ChatInputProps = {
     isModelFixed?: boolean;
     onModelChange?: (model: string, provider: string) => void;
     initialSearch?: boolean;
+    alignment?: "bottom" | "top";
 };
 
 function ErrorToast({ message, onClose }: { message: string, onClose: () => void }) {
@@ -35,7 +36,8 @@ function ErrorToast({ message, onClose }: { message: string, onClose: () => void
 
 export default function ChatInput({ onSend,
     className, generating, isModelFixed = false,
-    model: initialModel, provider: initialProvider, onModelChange, initialSearch
+    model: initialModel, provider: initialProvider, onModelChange, initialSearch,
+    alignment = "top"
 }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
@@ -88,7 +90,15 @@ export default function ChatInput({ onSend,
                     setModelCapabilities(new Map());
                 });
         }
-    }, [isModelFixed, model, provider, initialModel, initialSearch, initialProvider, onModelChange]);
+    }, [isModelFixed, model, provider, onModelChange]);
+
+    useEffect(() => {
+        if (initialModel && initialProvider) {
+            setModel(initialModel);
+            setProvider(initialProvider);
+            onModelChange?.(initialModel, initialProvider);
+        }
+    }, [initialModel, initialSearch, initialProvider, onModelChange])
 
     // Set initial model and provider after fetching capabilities
     useEffect(() => {
@@ -234,15 +244,16 @@ export default function ChatInput({ onSend,
                                         label=""
                                         options={{
                                             disableLabelsOnElements: true,
+                                            popupVerticalAlignment: alignment === "top" ? "bottom" : "top",
                                         }}
                                         className="mr-3"
                                         items={modelCapabilities?.values().toArray().map(m => {
                                             const supportedFeatures: string[] = [];
                                             if (m?.supportsAttachmentsImages) {
-                                                supportedFeatures.push("./vision.svg");
+                                                supportedFeatures.push("/vision.svg");
                                             }
                                             if (m?.supportsAttachmentsPDFs) {
-                                                supportedFeatures.push("./pdfs.svg");
+                                                supportedFeatures.push("/pdfs.svg");
                                             }
 
                                             return {
@@ -301,7 +312,7 @@ export default function ChatInput({ onSend,
                                     </svg>
                                 </button>
                             )}
-                            
+
                             <button type="button" onClick={() => setEnableSearch(!enableSearch)}
                                 className={`${enableSearch ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 px-4 min-md:h-full cursor-pointer flex justify-center items-center transition-all duration-250`}
                             >

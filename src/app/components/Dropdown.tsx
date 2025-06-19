@@ -154,6 +154,35 @@ export default function Dropdown({ className, label, items: options, name, optio
         setCurrentSelectionIndex(foundSelectionIndex);
     }, [options]);
 
+    // Determine dropdown vertical alignment automatically if not provided
+    const [verticalAlign, setVerticalAlign] = useState<'top' | 'bottom'>('bottom');
+    useEffect(() => {
+        if (!shown || !dropdownButtonRef.current) return;
+        if (settings?.popupVerticalAlignment) {
+            setVerticalAlign(settings.popupVerticalAlignment);
+            return;
+        }
+        const rect = dropdownButtonRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - (rect.top + rect.height);
+        const spaceAbove = rect.top;
+        // Estimate dropdown height (max 60vh)
+        const estimatedHeight = Math.min(window.innerHeight * 0.6, 400);
+        if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+            setVerticalAlign('top');
+        } else {
+            setVerticalAlign('bottom');
+        }
+    }, [shown, settings?.popupVerticalAlignment]);
+
+    // Dropdown ref and measured height for precise top alignment
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [dropdownHeight, setDropdownHeight] = useState<number>(0);
+    React.useLayoutEffect(() => {
+        if ((shown || isClosing) && dropdownRef.current) {
+            setDropdownHeight(dropdownRef.current.offsetHeight);
+        }
+    }, [shown, isClosing, groupedByProvider]);
+
     const selectedOption = options[currentSelectionIndex];
     return (
         <div className={`relative w-max ${className}`}>
@@ -213,11 +242,16 @@ export default function Dropdown({ className, label, items: options, name, optio
                     `}</style>
                     <div
                         id="dropdown"
+                        ref={dropdownRef}
                         className={`absolute w-max mx-auto dropdown transition-all z-50 shadow-highlight rounded-3xl ${isClosing ? "dropdown-fadeout" : "dropdown-fadein"}`}
                         style={{
                             position: "absolute",
-                            left: dropdownPosition.left - 24,
-                            top: dropdownPosition.top + 60,
+                            left: Math.max(dropdownPosition.left - 24, 8),
+                            ...(verticalAlign === 'bottom' ? {
+                                top: dropdownPosition.top + 60,
+                            } : dropdownHeight ? {
+                                top: dropdownPosition.top - dropdownHeight,
+                            } : {}),
                             minWidth: dropdownPosition.width,
                             maxWidth: "90vw",
                             maxHeight: "60vh",
