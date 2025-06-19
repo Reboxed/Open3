@@ -273,7 +273,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                                             <div className="flex items-center gap-2 mb-1">
                                                 <h6 className="!font-semibold text-xs text-neutral-400 tracking-wide">{provider}</h6>
                                             </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            <div className="grid max-sm:grid-cols-1 max-md:grid-cols-2 min-md:grid-cols-3 gap-2">
                                                 {typedModels.map((option, i) => (
                                                     <button key={option.value} disabled={option.disabled} onClick={() => {
                                                         setCurrentSelectionIndex(options.findIndex(o => o.value === option.value));
