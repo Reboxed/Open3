@@ -126,7 +126,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                const chat = filteredChats[selected[0]];
                 if (chat && pendingDeleteId === chat.id && !deletingId) {
                     setPendingDeleteId("");
                     if (pendingDeleteTimeout.current) {
@@ -164,7 +164,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                // Use filteredChats for selection actions
+                const chat = filteredChats[selected[0]];
                 if (!chat) return;
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
@@ -185,7 +186,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                const chat = filteredChats[selected[0]];
                 if (!chat) return;
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
