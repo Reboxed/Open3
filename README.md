@@ -45,7 +45,7 @@ Chat Palette<br/>
 
 ### For the judges: Added within the additional 24 hour period for updating our submission
 
-1. Web Search. If you want to judge without it then pull the commit [`9e24936`](https://github.com/Reboxed/Open3/commit/9e24936fb803184683ec13d4ba9762835c67e81c) instead.
+1. Web Search. If you want to judge without it then pull the commit [`559d501`](https://github.com/Reboxed/Open3/tree/559d50181aacf4a8ec0cad8f6655b84bdf7c27aa) instead.
 
 <img width="927" alt="image" src="https://github.com/user-attachments/assets/8648aa1e-8a39-46e9-b64d-617ce81d1258" />
 
