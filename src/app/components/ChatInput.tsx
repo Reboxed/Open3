@@ -225,8 +225,8 @@ export default function ChatInput({ onSend,
                         className="max-h-[250px] w-full overflow-auto outline-none min-h-14"
                     />
 
-                    <div className="flex justify-between items-stretch gap-5">
-                        <div className="flex gap-3 min-md:items-stretch max-sm:flex-wrap">
+                    <div className="flex justify-between min-md:items-stretch gap-5 gap-y-1 max-sm:flex-wrap">
+                        <div className="flex gap-3">
                             {/* Only render dropdown if modelCapabilities are loaded and model is not fixed */}
                             {(() => {
                                 return !isModelFixed && (modelCapabilities?.size ?? 0) > 0 && (
@@ -273,7 +273,7 @@ export default function ChatInput({ onSend,
 
                             {showAttachmentButton && (
                                 <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
-                                    className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center transition-all duration-250`}
+                                    className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 min-md:h-full aspect-square cursor-pointer flex justify-center items-center transition-all duration-250`}
                                 >
                                     <svg width="26" height="26" viewBox="0 0 19 21" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <g filter="url(#filter0_di_3138_685)">
@@ -303,7 +303,7 @@ export default function ChatInput({ onSend,
                             )}
                             
                             <button type="button" onClick={() => setEnableSearch(!enableSearch)}
-                                className={`${enableSearch ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 px-4 h-full cursor-pointer flex justify-center items-center transition-all duration-250`}
+                                className={`${enableSearch ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 px-4 min-md:h-full cursor-pointer flex justify-center items-center transition-all duration-250`}
                             >
                                 Search
                             </button>
