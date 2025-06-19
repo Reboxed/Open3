@@ -25,13 +25,24 @@ export async function GET(_: NextRequest) {
         async start(controller) {
             // Create event listener function
             const eventListener = async (chatId: string, messages: string[]) => {
+                chatId = chatId.trim();
                 if (isClosed || !controller) return;
                 // Prevent duplicate processing
                 if (generatingChats.has(chatId)) return;
 
                 try {
-                    const rawChat = await redis!.hget(USER_CHATS_KEY(user.id), chatId);
-                    if (!rawChat) throw new Error(`Chat ${chatId} not found in Redis`);
+                    if (!redis) {
+                        throw new Error("Redis connection failure");
+                    }
+
+                    let rawChat: string | null = null;
+                    for (let attempt = 1; attempt <= 3; attempt++) {
+                        rawChat = await redis.hget(USER_CHATS_KEY(user.id), chatId);
+                        if (rawChat) break;
+                        if (attempt < 3) await new Promise(res => setTimeout(res, 500));
+                    }
+                    if (!rawChat) throw new Error(`Chat ${chatId} not found in Redis after 3 attempts`);
+
                     let rawChatJson: { [key: string]: any } = {};
                     let chat: ChatResponse | null = null;
                     try {
@@ -98,7 +109,7 @@ export async function GET(_: NextRequest) {
 
                         // Save the final title to Redis
                         const finalTitle = fullResponse.trim() || "Untitled Chat";
-                        await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
+                        await redis.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                             ...rawChatJson,
                             label: finalTitle,
                         } as ChatResponse));
@@ -108,7 +119,7 @@ export async function GET(_: NextRequest) {
                         // Try to save fallback title
                         try {
                             const fallbackTitle = fullResponse.trim() || "Untitled Chat";
-                            await redis!.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
+                            await redis.hset(USER_CHATS_KEY(user.id), chatId, JSON.stringify({
                                 ...chat,
                                 label: fallbackTitle,
                             } as ChatResponse));
