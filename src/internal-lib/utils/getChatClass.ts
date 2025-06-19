@@ -7,7 +7,7 @@ import { SYSTEM_PROMPT } from "@/internal-lib/constants";
  * Throws if provider is not supported.
  */
 export function getChatClass(provider: string, model: string, history: any[], systemPrompt?: string, apiKey?: string): Chat {
-    const prompt = systemPrompt || SYSTEM_PROMPT(model, provider, new Date().toISOString());
+    const prompt = systemPrompt ?? SYSTEM_PROMPT(model, provider, new Date().toISOString());
     switch (provider?.toLowerCase()) {
         // case "openai":
         //     return new OpenAIChat(history, model, prompt, apiKey);

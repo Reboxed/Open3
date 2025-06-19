@@ -1,8 +1,7 @@
 export const NEW_TITLE_EVENT = `new-title-event`;
 
-export const TITLE_PROMPT = `Generate ONLY a title of the main topic or intent of this request in a clearly and concisely (max 50 characters).
-The title should accurately reflect what the user is asking or discussing, and be engaging and easy to understand.
-NEVER generate \`${NEW_TITLE_EVENT}\` as a title.`;
+export const TITLE_PROMPT = `Generate ONLY a title of the main topic or intent of this request clearly and concisely (max 50 characters).
+The title should accurately reflect what the user is asking or discussing, and be engaging and easy to understand.`;
 
 // Stupid ahh prompt, just don't read this, DONT. - unlesss you want to improve it i guess
 export const SYSTEM_PROMPT = (model: string, provider: string, date: string, withSearch?: boolean) => `

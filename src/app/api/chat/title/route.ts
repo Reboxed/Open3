@@ -86,7 +86,8 @@ export async function GET(_: NextRequest) {
 
                         let chat;
                         try {
-                            chat = getChatClass("openrouter", "google/gemini-flash-1.5", messages.slice(0, -2), TITLE_PROMPT, apiKey);
+                            chat = getChatClass("openrouter", "google/gemini-flash-1.5", [], TITLE_PROMPT, apiKey);
+                            console.log(TITLE_PROMPT)
                         } catch (e) {
                             controller.enqueue(encoder.encode(`event: error\ndata: Unsupported chat provider\n\n`));
                             return;
@@ -95,7 +96,7 @@ export async function GET(_: NextRequest) {
                         const readableStream = await chat.sendStream({
                             parts: [{ text: messages[messages.length - 1] }],
                             role: "user",
-                        }, false, 75);
+                        }, false, 200);
 
                         const reader = readableStream.getReader();
                         while (true) {

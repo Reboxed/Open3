@@ -165,22 +165,26 @@ export class OpenRouterChat implements Chat {
         headers["HTTP-Referer"] = "https://open3.rebxd.com";
         headers["X-Title"] = "Open3";
 
+        const openRouterMessages: any = messages;
+        console.log("Using system prompt:", this.systemPrompt);
+        if (this.systemPrompt) {
+            openRouterMessages.unshift({
+                role: "system",
+                content: this.systemPrompt,
+            });
+        }
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers,
             body: JSON.stringify({
                 model: this.model,
-                messages,
+                messages: openRouterMessages,
                 max_tokens: maxCompletionTokens,
                 stream: true,
                 // Enable search if requested
                 ...(withSearch ? {
                     plugins: [{ id: "web" }]
                 } : {}),
-                // Include system prompt if set
-                ...(this.systemPrompt ? {
-                    system: this.systemPrompt
-                } : {})
             })
         });
         if (!response.ok && !response.body) {
@@ -306,9 +310,14 @@ export class OpenRouterChat implements Chat {
         headers["HTTP-Referer"] = "https://open3.rebxd.com";
         headers["X-Title"] = "Open3";
 
+        const openRouterMessages: any = messages;
+        openRouterMessages.unshift({
+            role: "system",
+            content: this.systemPrompt,
+        });
         const body = JSON.stringify({
             model: `${this.model}${withSearch ? ":online" : ""}`,
-            messages,
+            messages: openRouterMessages,
             max_tokens: maxCompletionTokens,
             ...(this.systemPrompt ? { system: this.systemPrompt } : {})
         });
