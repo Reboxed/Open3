@@ -36,6 +36,7 @@ Chat Palette<br/>
   - OPT/ALT+SHIFT+TAB (Prev tab)
 - In-chat
   - OPT/ALT+W (Close tab)
+  - Shift+Enter (New line)
 - Chat Palette
   - Shift+Backspace / DELETE (Delete chat)
   - Shift+Click / Touch: Press and Hold (Bulk select)
