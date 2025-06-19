@@ -8,6 +8,7 @@ import { getChatClass } from "@/internal-lib/utils/getChatClass";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 import { doAiResponseInBackground, getAttachmentParts } from "@/internal-lib/utils/aiStreaming";
 import { SYSTEM_PROMPT } from "@/internal-lib/constants";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
@@ -17,9 +18,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Get user and API keys and check authorization
-    const { requireByok, byok, user } = await getUserApiKeys();
+    const user = await currentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    const { requireByok, byok } = await getUserApiKeys(user);
 
     // Extract chat ID and prompt from request parameters
     const { id } = await params;

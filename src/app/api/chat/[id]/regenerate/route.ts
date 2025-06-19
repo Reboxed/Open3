@@ -9,6 +9,7 @@ import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 import { doAiResponseInBackground, getAttachmentParts } from "@/internal-lib/utils/aiStreaming";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
@@ -18,9 +19,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Get user and API keys and check authorization
-    const { requireByok, byok, user } = await getUserApiKeys();
+    const user = await currentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
     if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    const { requireByok, byok } = await getUserApiKeys(user);
 
     // Extract chat ID and prompt from request parameters
     const { id } = await params;
@@ -114,7 +116,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         await redis.xtrim(MESSAGE_STREAM_KEY(chatJson.id), "MAXLEN", 0).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
-        
+
         setImmediate(() => {
             // Run AI response generation in the background
             doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat);

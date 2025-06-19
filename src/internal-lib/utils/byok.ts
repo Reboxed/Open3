@@ -1,7 +1,6 @@
-import { currentUser, User } from "@clerk/nextjs/server";
+import { User } from "@clerk/nextjs/server";
 
-export async function getUserApiKeys() {
-    const user = await currentUser();
+export async function getUserApiKeys(user: User) {
     if (!user) return { requireByok: false, byok: {}, user };
     const requireByok = process.env.REQUIRE_BYOK === "true" && user.privateMetadata?.team !== true;
     if (!requireByok) return { requireByok, byok: {
@@ -11,7 +10,7 @@ export async function getUserApiKeys() {
         openrouterKey: process.env.OPENROUTER_API_KEY,
     } as Record<string, string>, user };
     const byok = (user.privateMetadata?.byok as Record<string, string>) || {};
-    return { requireByok, byok, user };
+    return { requireByok, byok };
 }
 
 export function getProviderApiKey(provider: string, byok: Record<string, string>) {

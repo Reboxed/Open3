@@ -6,6 +6,7 @@ import { TITLE_PROMPT } from "@/internal-lib/constants";
 import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
+import { currentUser } from "@clerk/nextjs/server";
 
 
 export async function GET(_: NextRequest) {
@@ -13,8 +14,10 @@ export async function GET(_: NextRequest) {
         return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
     }
 
-    const { requireByok, byok, user } = await getUserApiKeys();
+    const user = await currentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
+    const { requireByok, byok } = await getUserApiKeys(user);
 
     let eventListener: ((chatId: string, messages: string[]) => Promise<void>) | null = null;
     const generatingChats = new Set<string>();
