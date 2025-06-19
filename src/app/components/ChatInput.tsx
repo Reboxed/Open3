@@ -226,7 +226,7 @@ export default function ChatInput({ onSend,
                     />
 
                     <div className="flex justify-between items-stretch gap-5">
-                        <div className="flex gap-3 items-stretch flex-wrap">
+                        <div className="flex gap-3 min-md:items-stretch max-sm:flex-wrap">
                             {/* Only render dropdown if modelCapabilities are loaded and model is not fixed */}
                             {(() => {
                                 return !isModelFixed && (modelCapabilities?.size ?? 0) > 0 && (
@@ -301,7 +301,7 @@ export default function ChatInput({ onSend,
                                     </svg>
                                 </button>
                             )}
-
+                            
                             <button type="button" onClick={() => setEnableSearch(!enableSearch)}
                                 className={`${enableSearch ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 px-4 h-full cursor-pointer flex justify-center items-center transition-all duration-250`}
                             >
