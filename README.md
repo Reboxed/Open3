@@ -130,6 +130,8 @@ Chat Palette<br/>
 
 1. Web Search. If you want to judge without it then pull the commit 559d50181aacf4a8ec0cad8f6655b84bdf7c27aa instead.
 
+<img width="927" alt="image" src="https://github.com/user-attachments/assets/8648aa1e-8a39-46e9-b64d-617ce81d1258" />
+
 ### *Chapter 1:* Right after the cloneathon
 
 1. A bit of a refactor/touch ups/speed improvements
