@@ -1,7 +1,7 @@
 # Dear, Open3 Contributors
 So you want to add your own mysteries to the codebase of yours truly? Well then fellow adventurer of the Open-Source lands, you may traverse the dangerous lands.
 
-At a time long before the cloneathon, tis has been nothing but husk and dust, but then the mighty creator has made an invaluable discovery — A “YouTube”-community post of the creator “The - t3.gg”. What it is you may ask, traveler? It was a treasure. An invaluable treasure of potential $5K that may await him to support the creators' child — Reboxed.
+At a time long before the cloneathon, tis has been nothing but husk and dust, but then our mighty creator has made an invaluable discovery — A “YouTube”-community post of the creator “Thep - t3.gg”. What it is you may ask, traveler? It was a treasure. An invaluable treasure of potential $5K that may await him to support the creators' child — Reboxed.
 
 ---
 
