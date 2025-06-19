@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useRef, FormEventHandler } from "react";
+import { useEffect, useState, useRef, FormEventHandler, useMemo } from "react";
 import Dropdown from "./Dropdown";
 import { ModelCapabilities } from "../lib/types/ai";
 import { escape as escapeHtml } from "html-escaper";
+import { getAllModelCapabilities } from "@/internal-lib/utils/getAllModelCapabilities";
 
 type OptionalReturn<T> = void | T | Promise<void> | Promise<T>;
 type ChatInputProps = {
@@ -51,7 +52,7 @@ export default function ChatInput({ onSend,
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [model, setModel] = useState(initialModel);
     const [provider, setProvider] = useState(initialProvider);
-    const [modelCapabilities, setModelCapabilities] = useState(new Map<string, ModelCapabilities>());
+    const [modelCapabilities, setModelCapabilities] = useState(new Map<string, ModelCapabilities>(getAllModelCapabilities()));
 
     useEffect(() => {
         const label = labelRef.current;
@@ -59,38 +60,13 @@ export default function ChatInput({ onSend,
         label.hidden = inputValue.trim() != "" || inputValue.trim().split("\n").length > 2;
     }, [inputValue])
 
-    // Fetch model capabilities
     useEffect(() => {
         if (initialSearch) {
             setEnableSearch(initialSearch);
         }
-
-        if (isModelFixed) {
-            if ((!model || !provider) && initialModel && initialProvider) {
-                setModel(initialModel);
-                setProvider(initialProvider);
-                onModelChange?.(initialModel, initialProvider);
-            }
-            if (!model || !provider) return;
-            fetch(`/api/models?model=${encodeURIComponent(model)}&provider=${encodeURIComponent(provider)}`)
-                .then(res => res.json())
-                .then((filtered: [string, ModelCapabilities][]) => {
-                    setModelCapabilities(new Map(filtered));
-                })
-                .catch(() => {
-                    setModelCapabilities(new Map());
-                });
-        } else {
-            fetch("/api/models")
-                .then(res => res.json())
-                .then((allCaps: [string, ModelCapabilities][]) => {
-                    setModelCapabilities(new Map(allCaps));
-                })
-                .catch(() => {
-                    setModelCapabilities(new Map());
-                });
-        }
-    }, [isModelFixed, model, provider, onModelChange]);
+        // No fetch, just use allCapabilities
+        setModelCapabilities(new Map(getAllModelCapabilities()));
+    }, [initialSearch]);
 
     useEffect(() => {
         if (initialModel && initialProvider) {

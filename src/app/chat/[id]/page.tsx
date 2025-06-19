@@ -14,8 +14,10 @@ import { useParams } from "next/navigation";
 import { loadMessagesFromServer } from "@/app/lib/utils/messageUtils";
 import Image from "next/image";
 import { Protect, SignedOut } from "@clerk/nextjs";
+import { useModelProvider } from "./ModelProviderContext";
 
 export default function Chat() {
+    const { model, provider } = useModelProvider();
     const params = useParams();
     const tabId = params.id?.toString() ?? "";
 
@@ -28,8 +30,6 @@ export default function Chat() {
     const programmaticScrollRef = useRef(false);
     const topSentinelRef = useRef<HTMLDivElement>(null);
     const [streamError, setStreamError] = useState<string | null>(null);
-    const [model, setModel] = useState<string | null>(null);
-    const [provider, setProvider] = useState<string | null>(null);
     const [byokRequired, setByokRequired] = useState(false);
 
     const fetchMessages = useCallback(async () => {
@@ -353,23 +353,6 @@ export default function Chat() {
         setMessages(messages.slice(0, idx));
     }
 
-    // Fetch chat info (model/provider) on mount
-    useEffect(() => {
-        if (!tabId) return;
-        fetch(`/api/chat/${tabId}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.model && data.provider) {
-                    setModel(data.model);
-                    setProvider(data.provider);
-                }
-            })
-            .catch(() => {
-                setModel(null);
-                setProvider(null);
-            });
-    }, [tabId]);
-
     useEffect(() => {
         fetch("/api/byok/required").then(res => res.json()).then(data => {
             setByokRequired(data.required);
@@ -378,6 +361,23 @@ export default function Chat() {
             }
         });
     }, []);
+
+    // Fetch chat info (model/provider) on mount
+    // useEffect(() => {
+    //     if (!tabId) return;
+    //     fetch(`/api/chat/${tabId}`)
+    //         .then(res => res.json())
+    //         .then data => {
+    //             if (data && data.model && data.provider) {
+    //                 setModel(data.model);
+    //                 setProvider(data.provider);
+    //             }
+    //         })
+    //         .catch(() => {
+    //             setModel(null);
+    //             setProvider(null);
+    //         });
+    // }, [tabId]);
 
     if (byokRequired) return null;
 
@@ -450,15 +450,17 @@ export default function Chat() {
                             </div>
                         )}
                     </div>
-                    <ChatInput
-                        onSend={onSend}
-                        generating={generating}
-                        className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
-                        model={model}
-                        provider={provider}
-                        initialSearch={initialSearch}
-                        alignment="bottom"
-                    />
+                    {model && provider && (
+                        <ChatInput
+                            onSend={onSend}
+                            generating={generating}
+                            className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
+                            model={model}
+                            provider={provider}
+                            initialSearch={initialSearch}
+                            alignment="bottom"
+                        />
+                    )}
                 </div>
             </Protect>
             <SignedOut>
@@ -562,7 +564,7 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
                         <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copiedCode ? "scale(1)" : "scale(0)", zIndex: copiedCode ? 1 : 0 }}>
                             {/* Checkmark SVG */}
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="currentColor" strokeWidth="1.5" />
+                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="currentColor" strokeWidth="2.5" />
                             </svg>
                         </span>
                     </button>

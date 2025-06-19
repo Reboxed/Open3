@@ -200,7 +200,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                         <>
                             <input name={name} type="hidden" onChange={() => { }} className="opacity-0 w-0 h-0 -z-10" value={selectedOption.value} />
                             {selectedOption.icon ?
-                                <Image id="selectedIcon" src={selectedOption.icon} className={`mr-2`} width={18} height={18} alt={`${selectedOption.name} icon`} title={`${selectedOption.name} icon`} />
+                                <Image id="selectedIcon" src={selectedOption.icon} className={`mr-2 w-[18px] h-[18px] `} width={18} height={18} alt={`${selectedOption.name} icon`} title={`${selectedOption.name} icon`} />
                                 : null}
                             <span className="mr-auto text-left whitespace-nowrap overflow-visible text-ellipsis font-medium" style={{ maxWidth: "100%" }}>
                                 {
