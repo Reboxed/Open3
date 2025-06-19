@@ -7,6 +7,7 @@ import { getUserApiKeys, getProviderApiKey } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 import { doAiResponseInBackground, getAttachmentParts } from "@/internal-lib/utils/aiStreaming";
+import { SYSTEM_PROMPT } from "@/internal-lib/constants";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Extract chat ID and prompt from request parameters
     const { id } = await params;
 
-    const { prompt, attachments } = await req.json();
+    const { prompt, attachments, search } = await req.json();
     if (!prompt) {
         return NextResponse.json({ error: "Prompt is required" } as ApiError, { status: 400 });
     }
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let chat;
     try {
         // Instantiate the chat class based on provider and model
-        chat = getChatClass(chatProvider, chatModel, existingMessages, undefined, apiKey);
+        chat = getChatClass(chatProvider, chatModel, existingMessages, SYSTEM_PROMPT(chatModel, chatProvider, new Date().toLocaleString(), search), apiKey);
     } catch (e) {
         return NextResponse.json({ error: "Unsupported chat provider" } as ApiError, { status: 400 });
     }
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         setImmediate(() => {
             // Run AI response generation in the background
-            doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat);
+            doAiResponseInBackground(user.id, runtimeUserMessage, chatJson.id, chat, search === true);
         });
 
         return NextResponse.json({

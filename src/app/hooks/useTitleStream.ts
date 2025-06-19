@@ -37,8 +37,6 @@ export default function useTitleStream() {
 
         eventSource.onmessage = (event) => {
             const data = event.data as string | null | undefined;
-            console.log("Received title update:", data);
-
             const eventSplit = data?.split("::") || [];
             const chatId = eventSplit[0]?.trim();
             if (!chatId) {

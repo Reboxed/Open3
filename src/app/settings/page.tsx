@@ -38,11 +38,11 @@ export default function BYOKSetupPage() {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen">
-            <div className="flex flex-col">
+            <div className="flex flex-col max-w-[min(540px,90%)]">
                 <h1 className="text-2xl font-bold mb-4">Bring-Your-Own-Key</h1>
-                <span className="max-w-135"><strong>Inference is expensive.</strong> I wanted to, at first, release this for free and then $6/mo or summin but i couldn&apos;t get all that done in the time of the hackathon (especially the business stuff required for it), BUT I am dedicated to even fully refactor this project after and release it both Open-Source and hosted.</span>
+                <span className="max-w-full"><strong>Inference is expensive.</strong> I wanted to, at first, release this for free and then $6/mo or summin but i couldn&apos;t get all that done in the time of the hackathon (especially the business stuff required for it), BUT I am dedicated to even fully refactor this project after and release it both Open-Source and hosted.</span>
                 <br/>
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full max-w-135">
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full max-w-full">
                     {/* <label className="w-full">
                         <h3>Gemini API Key</h3>
                         <input
@@ -85,7 +85,7 @@ export default function BYOKSetupPage() {
                             placeholder="..."
                         />
                     </label>
-                    <span className="max-w-113 opacity-65">Native AI APIs are coming soon (well technically already implemented but its unstable)</span>
+                    <span className="max-w-full opacity-65">Native AI APIs are coming soon (well technically already implemented but its unstable)</span>
                     <button type="submit" className="bg-white/10 py-3 rounded-xl cursor-pointer" disabled={loading}>
                         {loading ? "Saving..." : "Save Keys"}
                     </button>

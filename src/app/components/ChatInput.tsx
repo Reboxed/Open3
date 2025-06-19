@@ -11,13 +11,14 @@ type ChatInputProps = {
     /**
      * @returns the new value to set the input field to after. Default is "".
     **/
-    onSend?: (message: string, attachments: { url: string; filename: string }[], model: string, provider: string) => OptionalReturn<string>;
+    onSend?: (message: string, attachments: { url: string; filename: string }[], search: boolean, model: string, provider: string) => OptionalReturn<string>;
     className?: string;
     generating?: boolean;
     model?: string | null | undefined;
     provider?: string | null | undefined;
     isModelFixed?: boolean;
     onModelChange?: (model: string, provider: string) => void;
+    initialSearch?: boolean;
 };
 
 function ErrorToast({ message, onClose }: { message: string, onClose: () => void }) {
@@ -34,7 +35,7 @@ function ErrorToast({ message, onClose }: { message: string, onClose: () => void
 
 export default function ChatInput({ onSend,
     className, generating, isModelFixed = false,
-    model: initialModel, provider: initialProvider, onModelChange
+    model: initialModel, provider: initialProvider, onModelChange, initialSearch
 }: ChatInputProps) {
     const labelRef = useRef<HTMLLabelElement>(null);
     const inputRef = useRef<HTMLDivElement>(null);
@@ -42,6 +43,7 @@ export default function ChatInput({ onSend,
     // const [makeImage, setMakeImage] = useState(false);
     // const [search, setSearch] = useState(false);
     const [enableAttachments, setEnableAttachments] = useState(false);
+    const [enableSearch, setEnableSearch] = useState(initialSearch ?? false);
     const [attachments, setAttachments] = useState<{ url: string; filename: string }[]>([]);
     const [errorToast, setErrorToast] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,10 @@ export default function ChatInput({ onSend,
 
     // Fetch model capabilities
     useEffect(() => {
+        if (initialSearch) {
+            setEnableSearch(initialSearch);
+        }
+
         if (isModelFixed) {
             if ((!model || !provider) && initialModel && initialProvider) {
                 setModel(initialModel);
@@ -82,7 +88,7 @@ export default function ChatInput({ onSend,
                     setModelCapabilities(new Map());
                 });
         }
-    }, [isModelFixed, model, provider, initialModel, initialProvider, onModelChange]);
+    }, [isModelFixed, model, provider, initialModel, initialSearch, initialProvider, onModelChange]);
 
     // Set initial model and provider after fetching capabilities
     useEffect(() => {
@@ -145,13 +151,14 @@ export default function ChatInput({ onSend,
         if (!inputValue && attachments.length === 0) return;
         if (!model || !provider) return;
 
-        const newContentRaw = onSend?.(inputValue, attachments, model, provider);
+        setInputValue("");
+        const newContentRaw = onSend?.(inputValue, attachments, enableSearch, model, provider);
         const newContent = newContentRaw instanceof Promise ? await newContentRaw : newContentRaw;
 
         const input = inputRef.current;
         if (input) {
             input.innerText = newContent ?? "";
-            setInputValue((newContent ?? ""));
+            setInputValue(newContent ?? "");
         }
         setAttachments([]);
     }
@@ -265,7 +272,7 @@ export default function ChatInput({ onSend,
                             })()}
                             {showAttachmentButton && (
                                 <button type="button" onClick={() => setEnableAttachments(!enableAttachments)}
-                                    className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center`}
+                                    className={`${enableAttachments ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 h-full aspect-square cursor-pointer flex justify-center items-center transition-all duration-250`}
                                 >
                                     <svg width="26" height="26" viewBox="0 0 19 21" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <g filter="url(#filter0_di_3138_685)">
@@ -293,6 +300,11 @@ export default function ChatInput({ onSend,
                                     </svg>
                                 </button>
                             )}
+                            <button type="button" onClick={() => setEnableSearch(!enableSearch)}
+                                className={`${enableSearch ? "bg-primary shadow-active-button text-neutral-50" : "bg-black/10 shadow-inactive-button text-neutral-50/50"} rounded-full py-1.5 px-4 h-full cursor-pointer flex justify-center items-center transition-all duration-250`}
+                            >
+                                Search
+                            </button>
                         </div>
                         <button type="submit" className="bg-white text-black rounded-full px-4 py-1.5 cursor-pointer font-semibold disabled:opacity-50" disabled={generating}>
                             {generating ? "Generating" : "Send"}

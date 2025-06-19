@@ -1,3 +1,4 @@
+import { ChunkResponse } from "@/app/lib/types/ai";
 import redis, { createRedisConnection, MESSAGE_STREAM_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
 import { ApiError, ChatResponse } from "@/internal-lib/types/api";
 import { currentUser } from "@clerk/nextjs/server";
@@ -73,10 +74,11 @@ export async function GET(req: NextRequest) {
                             }
                             
                             // Each massage has a chunk key and a value which is just plain text
-                            const message = fields[1];
-                            if (!message) continue;
-                            // console.log("Received message: " + message.replace(/\n/g, "\\n"));
-                            controller.enqueue(encoder.encode(`data: ${message.replace(/\n/g, "\\n")}\n\n`));
+                            const chunk = fields[1];
+                            if (!chunk) continue;
+                            const parsed = JSON.parse(chunk) as ChunkResponse;
+                            if (!parsed.content) continue;
+                            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
                         }
 
                         lastId = messages[messages.length - 1][0]; // Update lastId to the last message ID

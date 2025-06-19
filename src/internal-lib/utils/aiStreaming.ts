@@ -1,4 +1,4 @@
-import { Chat, Message } from "@/app/lib/types/ai";
+import { Chat, ChunkResponse, Message } from "@/app/lib/types/ai";
 import { CHAT_GENERATING_KEY, CHAT_MESSAGES_KEY, GET_LOOKUP_KEY, MESSAGE_STREAM_KEY, USER_FILES_KEY } from "../redis";
 import { NextResponse } from "next/server";
 import redis from "@/internal-lib/redis";
@@ -99,10 +99,10 @@ export async function getAttachmentParts({ userId, chatId, originalName, uploads
     }
 }
 
-export async function doAiResponseInBackground(userId: string, message: Message, chatId: string, chat: Chat) {
+export async function doAiResponseInBackground(userId: string, message: Message, chatId: string, chat: Chat, search?: boolean) {
     const messageStreamKey = MESSAGE_STREAM_KEY(chatId);
     try {
-        const stream = await chat.sendStream(message);
+        const stream = await chat.sendStream(message, search);
 
         const genResult = await redis.set(CHAT_GENERATING_KEY(chatId), "1", "EX", 2 * 60 * 60).catch((err) => {
             console.error(err);
@@ -114,7 +114,10 @@ export async function doAiResponseInBackground(userId: string, message: Message,
 
         const reader = stream.getReader();
         // Collect the full response
-        let fullResponse = "";
+        const aiMessage: Message = {
+            role: "model",
+            parts: [{ text: "", annotations: [] }]
+        };
 
         const decoder = new TextDecoder("utf-8");
         while (true) {
@@ -122,30 +125,25 @@ export async function doAiResponseInBackground(userId: string, message: Message,
             if (done) break;
 
             // Parse the chunk to extract the text
-            const chunkText = decoder.decode(value);
-            if (chunkText.startsWith("data: ")) {
-                try {
-                    const text = chunkText.slice(6).replace(/(?:\r?\n){2}$/, "");
-                    fullResponse += text;
+            const chunk = decoder.decode(value);
+            try {
+                const parsed = JSON.parse(chunk) as ChunkResponse;
+                aiMessage.parts[0].text += parsed.content;
+                aiMessage.parts[0].annotations?.push(...parsed.urlCitations || []);
 
-                    // Add the chunk to the Redis stream
-                    await redis.xadd(messageStreamKey, "*", "chunk", text).catch((err) => {
-                        console.error(err);
-                        return null;
-                    });
-                } catch (e) {
-                    // Idk what would trigger this, but just in case
-                    console.error("Failed to parse chunk text:", e);
-                }
+                // Add the chunk to the Redis stream
+                await redis.xadd(messageStreamKey, "*", "chunk", chunk).catch((err) => {
+                    console.error(err);
+                    return null;
+                });
+            } catch (e) {
+                // Idk what would trigger this, but just in case
+                console.error("Failed to parse chunk text:", e);
             }
         }
 
         // Save AI response to Redis
-        if (fullResponse) {
-            const aiMessage: Message = {
-                role: "model",
-                parts: [{ text: fullResponse }]
-            };
+        if (aiMessage.parts[0].text) {
             await redis.rpush(CHAT_MESSAGES_KEY(chatId), JSON.stringify(aiMessage));
         }
 

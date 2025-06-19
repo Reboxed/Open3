@@ -32,7 +32,7 @@ export default function Home() {
         });
     }, []);
 
-    async function onSend(msg: string, attachments: { url: string; filename: string }[] = [], model?: string, provider?: string) {
+    async function onSend(msg: string, attachments: { url: string; filename: string }[] = [], search: boolean, model?: string, provider?: string) {
         setGenerating(true);
         const chat = await fetch("/api/chat", {
             method: "POST",
@@ -46,7 +46,7 @@ export default function Home() {
             setGenerating(false);
             return;
         }
-        sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, tabId: chat.id }));
+        sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: msg, attachments, search, tabId: chat.id }));
         addAndSaveTabsLocally(localStorage, {
             id: chat.id,
             link: `/chat/${chat.id}`
@@ -89,7 +89,7 @@ export default function Home() {
 
     return (
         <div className="min-w-full min-h-0 flex-1 flex flex-col justify-center items-center">
-            <div className="flex flex-col h-fit gap-2 w-[80%] max-w-[1000px] max-md:w-[90%]">
+            <div className="flex flex-col h-fit gap-2 w-[80%] max-w-[1000px] max-md:w-[90%] py-12">
                 <SignedIn>
                     <h2>Welcome back, {auth.user?.fullName ?? auth.user?.username ?? "loading..."}</h2>
                     <ChatInput
@@ -111,7 +111,7 @@ export default function Home() {
                     )}
                     <div
                         style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
-                        className={`grid gap-7 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
+                        className={`grid gap-7 max-md:!grid-cols-2 max-sm:!grid-cols-1 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
                     >
                         {recentChats.map(chat => (
                             <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {

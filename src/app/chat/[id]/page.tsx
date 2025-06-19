@@ -1,17 +1,17 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import ChatInput from "../../components/ChatInput";
+import ChatInput from "@/app/components/ChatInput";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css"; // Change to preferred style
-import { Message } from "../../lib/types/ai";
+import { ChunkResponse, Message } from "@/app/lib/types/ai";
 import { escape } from "html-escaper";
-import rehypeClassAll from "../../lib/utils/rehypeClassAll";
+import rehypeClassAll from "@/app/lib/utils/rehypeClassAll";
 import { useParams } from "next/navigation";
-import { loadMessagesFromServer } from "../../lib/utils/messageUtils";
+import { loadMessagesFromServer } from "@/app/lib/utils/messageUtils";
 import Image from "next/image";
 import { Protect, SignedOut } from "@clerk/nextjs";
 
@@ -83,10 +83,12 @@ export default function Chat() {
         }
     }, [messages, messagesLoading, autoScroll]);
 
-    const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = []) => {
+    const localGenerating = useRef(generating);
+    const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = [], search: boolean) => {
         // Add user message optimistically to UI
         const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
         setMessages(prev => [...prev, userMessage]);
+        localGenerating.current = true;
         setGenerating(true);
 
         const response = await fetch(`/api/chat/${tabId}/send`, {
@@ -97,15 +99,18 @@ export default function Chat() {
             body: JSON.stringify({
                 prompt: message,
                 attachments: attachments.length > 0 ? attachments : undefined,
+                search
             }),
         }).catch(() => {
             setGenerating(false);
+            localGenerating.current = false;
             setStreamError("Failed to send message");
             return;
         });
 
         if (!response || !response.ok) {
             setGenerating(false);
+            localGenerating.current = false;
             setStreamError("Failed to send message");
             return;
         }
@@ -182,25 +187,45 @@ export default function Chat() {
         eventSource.addEventListener("stream-error", streamErrorEvent);
 
         let assistantMessage = "";
-        eventSource.onmessage = (event) => {
+        eventSource.onmessage = async (event) => {
+            if (!localGenerating.current) {
+                // That means this client didn't start the generation, therefore reload the state first
+                await reloadMessagesFromServerIfStateInvalid().catch(() => {
+                    setStreamError("Failed to reload messages from server");
+                    setGenerating(false);
+                    localGenerating.current = false;
+                    return;
+                });
+            }
+            if (streamError) {
+                // If there is a stream error, we shouldn't process new messages
+                return;
+            }
+
             setGenerating(true);
             // Preserve newlines by replacing explicit \n or handling chunked data
-            let chunk = event.data;
-            // If your backend sends literal "\\n", replace with "\n"
-            chunk = chunk.replace(/\\n/g, "\n");
-            // If backend sends real newlines, this is not needed
+            const chunk = event.data;
+            try {
+                const parsed = JSON.parse(chunk) as ChunkResponse;
+                if (!parsed.content) return; // Skip empty chunks
 
-            assistantMessage += chunk;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage?.role === "model") {
-                    lastMessage.parts = [{ text: assistantMessage }];
-                    return [...newMessages];
-                } else {
-                    return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-                }
-            });
+                assistantMessage += parsed.content;
+                setMessages(prev => {
+                    const newMessages = [...prev];
+                    const lastMessage = newMessages[newMessages.length - 1];
+                    if (lastMessage?.role === "model") {
+                        lastMessage.parts = [{ text: assistantMessage, annotations: parsed.urlCitations || [] }];
+                        return [...newMessages];
+                    } else {
+                        return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
+                    }
+                });
+            } catch (e) {
+                console.error("Failed to parse chunk text:", e);
+                setStreamError("Failed to parse response chunk");
+                setGenerating(false);
+                eventSource.close();
+            }
         }
 
         eventSource.addEventListener("error", (event) => {
@@ -231,9 +256,10 @@ export default function Chat() {
                 eventSourceRef.current = null;
             }
         }
-    }, [tabId]);
+    }, [tabId, streamError]);
 
-
+    // Memorize initial search state from sessionStorage (lines 262-283 logic)
+    const [initialSearch, setInitialSearch] = useState<boolean | undefined>(undefined);
     useEffect(() => {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
         if (tempNewMsg) {
@@ -250,9 +276,10 @@ export default function Chat() {
                         };
                         checkEventSource();
                     });
+                    setInitialSearch(!!parsedMsg.search);
                     sessionStorage.removeItem("temp-new-tab-msg");
                     waitUntilEventSource.then(() => {
-                        onSend(parsedMsg.message, parsedMsg.attachments || []);
+                        onSend(parsedMsg.message, parsedMsg.attachments || [], parsedMsg.search || false);
                     });
                 }
             } catch { }
@@ -430,6 +457,7 @@ export default function Chat() {
                         model={model}
                         provider={provider}
                         isModelFixed
+                        initialSearch={initialSearch}
                     />
                 </div>
             </Protect>
@@ -552,16 +580,11 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
         : "p-2 mb-1 break-words max-w-full overflow-x-auto";
 
     const renderedMarkdown = useMemo(() => {
-        // Only apply syntax highlighting for model messages
-        const rehypePlugins = isUser
-            ? [rehypeRaw, [rehypeClassAll, { className: "md" }]]
-            : [rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]];
-
         return (
             <Markdown
                 skipHtml={isUser}
                 unwrapDisallowed={true}
-                rehypePlugins={rehypePlugins as any[]}
+                rehypePlugins={[rehypeRaw, rehypeHighlight, [rehypeClassAll, { className: "md" }]]}
                 remarkPlugins={[remarkGfm]}
                 components={{
                     pre: PreWithCopy
@@ -642,6 +665,22 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
         >
             <div className={`${className} max-w-full min-w-0`} style={{wordBreak: 'break-word', overflowX: 'auto'}}>
                 {renderedMarkdown}
+                {/* Annotations rendering */}
+                {message.parts && message.parts[0]?.annotations && message.parts[0].annotations.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2 gap-y-0.5">
+                        {message.parts[0].annotations.map((annotation, i) => (
+                            <a href={annotation.url_citation.url || "#"} target="_blank" rel="noopener noreferrer" key={i} className="group">
+                                <span
+                                    key={i}
+                                    className="inline-block bg-blue-900/60 hover:bg-blue-800  transition-all duration-250 text-blue-200 text-xs px-2 py-1 rounded-md border border-blue-400/30 max-w-xs truncate"
+                                    title={annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i+1}`}
+                                >
+                                    {annotation.url_citation.title || annotation.url_citation.url || `Annotation ${i+1}`}
+                                </span>
+                            </a>
+                        ))}
+                    </div>
+                )}
             </div>
             {message.attachments && message.attachments.length > 0 && (
                 <div className="relative flex flex-wrap gap-2 mt-3 justify-self-end">

@@ -73,7 +73,7 @@ export async function GET(_: NextRequest) {
                         const readableStream = await chat.sendStream({
                             parts: [{ text: messages[messages.length - 1] }],
                             role: "user",
-                        }, 75);
+                        }, false, 75);
 
                         const reader = readableStream.getReader();
                         const decoder = new TextDecoder("utf-8");
