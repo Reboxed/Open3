@@ -7,16 +7,17 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 - **Multi-Model Chat:** Seamlessly chat with multiple AI models (OpenAI, Gemini, Anthropic, and more).
 - **File Uploads:** Attach and process files in conversations.
 - **Real-Time Streaming:** Enjoy instant responses with Server-Sent Events (SSE).
+- **Syntax highlighting and Markdown**
+- **BYOK (Bring Your Own Key):** Securely use your own API keys for supported models.
+- **Web Search**
+- **Robust streams:** You can leave the website, come back, switch between chats or even devices and all your progress will be retained! (Title generation isn't yet robust, wait until title is done generating if you don't wanna loose it)
 - **Chat Management:** Create, delete, search, and organize chats with titles and bulk actions.
 - **Tabs:** Your device has "tabs" of the chats you currently want to see, you can switch bettwn them, close them, open them, etc. Helps with organizing especially across devices.
 - **Works well with keyboard:** Shortcuts below!
 - **Message copying/deleting/regenerating**
-- **Syntax highlighting and Markdown**
 - **Works well with touch**
-- **BYOK (Bring Your Own Key):** Securely use your own API keys for supported models.
 - **Extensible:** Modular(-ish?) codebase for easy addition of new models and features.
 - **Modern UI:** Responsive, accessible, and beautiful interface.
-- **Robust streams:** You can leave the website, come back, switch between chats or even devices and all your progress will be retained! (Title generation isn't yet robust, wait until title is done generating if you don't wanna loose it)
 
 ## Screenshots
 
@@ -125,13 +126,20 @@ Chat Palette<br/>
 
 ## Roadmap
 
+### Added within the additional 24 hour period for updating our submission
+
+1. Web Search. If you want to judge without it then pull the commit 559d50181aacf4a8ec0cad8f6655b84bdf7c27aa instead.
+
 ### *Chapter 1:* Right after the cloneathon
+
 1. A bit of a refactor/touch ups/speed improvements
 2. Implement message editing + chat branching + model switching mid-chat.
-3. Image generation and web search
+3. Image generation
 4. Pinning favorite models
 5. Chat sharing and Open3 Extensions
+
 ### *Chapter 2:* Publishing
+
 1. Migration to Reboxed infrastructure and SDKs since by then probably stable (Rebxd Auth, Rebxd Serverless, Rebxd Storage, Rebxd Realtime DB, etc. What is Rebxd? Right now not yet launched but check out our [Discord](https://discord.gg/xsBn7D9n6K) and YouTube (@rebxdcloud) so yeah)
 2. Adding captchas
 3. Stripe billing integration
