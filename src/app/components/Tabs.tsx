@@ -212,7 +212,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                         `}
                         onAnimationEnd={() => justAddedIdx === idx && setJustAddedIdx(null)}
                     >
-                        <span className="text-sm select-none whitespace-nowrap">
+                        <span className="text-sm select-none whitespace-nowrap max-w-xs truncate">
                             {tab.label}
                         </span>
 
