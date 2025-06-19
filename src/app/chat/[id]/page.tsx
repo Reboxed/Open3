@@ -657,16 +657,16 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
         }
     };
 
-    const responseText = message.parts[0]?.text ?? "";
-    const filteredAnnotations =
-        message.parts[0]?.annotations?.filter(
-            annotation =>
-                !(annotation.url_citation.start_index == 0 && annotation.url_citation.end_index == 0) &&
-                annotation.url_citation.end_index <= responseText.length
-        ) ?? [];
-    if (message.parts[0]?.annotations) {
-        message.parts[0].annotations = filteredAnnotations;
-    }
+    // const responseText = message.parts[0]?.text ?? "";
+    // const filteredAnnotations =
+    //     message.parts[0]?.annotations?.filter(
+    //         annotation =>
+    //             !(annotation.url_citation.start_index == 0 && annotation.url_citation.end_index == 0) &&
+    //             annotation.url_citation.end_index <= responseText.length
+    //     ) ?? [];
+    // if (message.parts[0]?.annotations) {
+    //     message.parts[0].annotations = filteredAnnotations;
+    // }
 
     return (
         <div
