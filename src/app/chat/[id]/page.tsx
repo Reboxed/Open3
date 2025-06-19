@@ -657,6 +657,19 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
         }
     };
 
+    const responseText = message.parts[0]?.text ?? "";
+    const filteredAnnotations =
+        message.parts[0]?.annotations?.filter(
+            (annotation: any) =>
+                typeof annotation.start === "number" &&
+                typeof annotation.end === "number" &&
+                annotation.start < annotation.end &&
+                annotation.end <= responseText.length
+        ) ?? [];
+    if (message.parts[0]?.annotations) {
+        message.parts[0].annotations = filteredAnnotations;
+    }
+
     return (
         <div
             className={`${isUser ? "justify-self-end col-start-2 " : "justify-self-start col-span-2"} max-w-full relative`}
