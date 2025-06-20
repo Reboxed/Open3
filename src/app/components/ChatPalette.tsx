@@ -500,7 +500,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const [shortcutLabel, setShortcutLabel] = useState("CTRL+K");
     useEffect(() => {
         if (typeof window !== "undefined" && navigator.userAgent.toLowerCase().includes("mac")) {
-            setShortcutLabel("CMD+K");
+            setShortcutLabel("⌘ K");
         } else {
             setShortcutLabel("CTRL+K");
         }
@@ -680,9 +680,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         <input ref={inputRef} onInput={onInput} id="search" className="w-full outline-none text-neutral-50/80" />
                     </div>
                     {!isTouchDevice && (
-                        <div className="bg-white/10 backdrop-blur-xl z-10 px-3 h-8 rounded-xl flex justify-center items-center text-sm font-mono text-neutral-200/65">
+                        <span className="bg-white/10 backdrop-blur-xl z-10 px-3 h-8 rounded-xl min-w-fit flex items-center text-sm text-neutral-200/65">
                             {shortcutLabel}
-                        </div>
+                        </span>
                     )}
                 </div>
                 {bulkDeleteMode && (

@@ -185,7 +185,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     const [closeShortcut, setCloseShortcut] = useState("Alt+W");
     useEffect(() => {
         const isMac = navigator.userAgent.toLowerCase().includes("mac");
-        setCloseShortcut(isMac ? "⌃W" : "Alt+W");
+        setCloseShortcut(isMac ? "⌃ W" : "Alt+W");
     }, []);
 
     return (
