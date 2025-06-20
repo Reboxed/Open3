@@ -2,6 +2,8 @@
 
 Open3 is a modern, full-stack AI chat application inspired by platforms like ChatGPT, Gemini, and more — created in connection to the [T3 Chat Cloneathon](https://cloneathon.t3.chat/) (we do not infringe any of T3 Chat's brandings, UIs, assets or copyrights nor are we affiliated with, but not exclusive to, T3, Theo or T3 Chat). Built with Next.js, TypeScript, and Node, it supports multi-model chat, file uploads, and real-time streaming, with a clean, mostly modular architecture.
 
+If you want or for help, join our [Discord](https://discord.gg/xsBn7D9n6K).
+
 ## Features
 
 - **Multi-Model Chat:** Seamlessly chat with multiple AI models (OpenAI, Gemini, Anthropic, and more).
