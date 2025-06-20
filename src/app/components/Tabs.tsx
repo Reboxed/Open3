@@ -142,6 +142,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
 
     // Keyboard shortcuts: Alt/Opt+W to close, Alt/Opt+Tab to next, Alt/Opt+Shift+Tab to prev
     useEffect(() => {
+        const isMac = typeof window !== "undefined" && navigator.userAgent.toLowerCase().includes("mac");
         function handleKeyDown(e: KeyboardEvent) {
             // Don't trigger shortcuts in input, textarea, or contenteditable
             // const target = e.target as HTMLElement;
@@ -158,7 +159,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 return;
             }
             // Next tab: Alt/Opt+Tab
-            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
+            if ((!isMac ? (e.altKey && !e.ctrlKey) : (e.ctrlKey && !e.altKey)) && !e.metaKey && !e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
                 e.preventDefault();
                 e.stopPropagation();
                 let nextIdx = activeTab + 1;
@@ -167,7 +168,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 return;
             }
             // Previous tab: Alt/Opt+Shift+Tab
-            if (e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
+            if ((!isMac ? (e.altKey && !e.ctrlKey) : (e.ctrlKey && !e.altKey)) && !e.metaKey && e.shiftKey && (e.key === "Tab" || e.code === "Tab")) {
                 e.preventDefault();
                 e.stopPropagation();
                 let prevIdx = activeTab - 1;
@@ -184,7 +185,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     const [closeShortcut, setCloseShortcut] = useState("Alt+W");
     useEffect(() => {
         const isMac = navigator.userAgent.toLowerCase().includes("mac");
-        setCloseShortcut(isMac ? "⌥W" : "Alt+W");
+        setCloseShortcut(isMac ? "⌃W" : "Alt+W");
     }, []);
 
     return (
