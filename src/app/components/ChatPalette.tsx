@@ -190,6 +190,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 if (renameId && chatTitleRename) {
                     handleRenameSave(chat.id, selected[0]);
                     return;
+                } else if (renameId) {
+                    setRenameId(null);
+                    return;
                 }
 
                 if (bulkDeleteMode && selectedChatIds.size > 0) {
@@ -911,8 +914,16 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                 <span className="flex-1 truncate">{chat.label ?? "New Chat"}</span>
                                             ) : (
                                                 <input
-                                                    autoFocus onFocus={e => {
+                                                    autoFocus
+                                                    onFocus={e => {
                                                         e.currentTarget.select();
+                                                    }}
+                                                    onSubmit={_ => {
+                                                        if (chatTitleRename) {
+                                                            handleRenameSave(chat.id, idx);
+                                                            return;
+                                                        }
+                                                        setRenameId(null);
                                                     }}
                                                     className="flex-1 outline-none transition-all duration-250 py-1 focus:py-2 focus:px-2 border-2 border-white/50 focus:border-1 focus:border-white/10 rounded-lg focus:bg-black/10"
                                                     onInput={(e) => setChatTitleRename(e.currentTarget.value)} onChange={(e) => setChatTitleRename(e.currentTarget.value)} value={chatTitleRename ?? chat.label ?? "New Chat"}
