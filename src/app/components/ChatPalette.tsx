@@ -147,12 +147,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     onDismiss();
                 }
             }
+
+            // Navigation
             if (e.key == "ArrowDown") {
                 e.preventDefault();
                 e.stopPropagation();
                 if (renameId) return;
 
-                let i = selected[0] + 1;
+                let i = selected[0] + (e.ctrlKey ? 5 : 1);
                 if (i >= filteredChats.length) {
                     i = filteredChats.length - 1 < 0 ? 0 : filteredChats.length - 1;
                 }
@@ -163,12 +165,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 e.stopPropagation();
                 if (renameId) return;
 
-                let i = selected[0] - 1;
+                let i = selected[0] - (e.ctrlKey ? 5 : 1);
                 if (i < 0) {
                     i = 0;
                 }
                 setSelected([i, 1]);
             }
+
             if (e.ctrlKey && e.key == "r") {
                 e.preventDefault();
                 e.stopPropagation();
