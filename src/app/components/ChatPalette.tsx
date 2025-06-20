@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import useSWR from "swr";
 import { ApiError, ChatResponse, GetChatsResponse } from "../../internal-lib/types/api";
 import { FormEventHandler, useEffect, useRef, useState, useMemo } from "react";
@@ -32,8 +32,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         page: 0,
         total: 0
     });
-    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-    const pendingDeleteTimeout = useRef<NodeJS.Timeout | null>(null);
     const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
     const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
     const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -41,6 +39,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const touchStartRef = useRef<{ chatId: string; startTime: number } | null>(null);
     const [longPressActive, setLongPressActive] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+
+    // Rename and delete
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    const pendingDeleteTimeout = useRef<NodeJS.Timeout | null>(null);
+    const [renameId, setRenameId] = useState<string | null>(null);
+    const [chatTitleRename, setChatTitleRename] = useState<string | null>(null);
 
     const { data, isLoading, mutate } = useSWR("/api/chat", async path => {
         return fetch(path).then(res => res.json() as Promise<GetChatsResponse | ApiError>);
@@ -120,6 +124,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 e.preventDefault();
                 e.stopPropagation();
 
+                if (renameId) {
+                    setRenameId(null);
+                    setChatTitleRename(null);
+                    return;
+                }
+
                 if (bulkDeleteMode || selectedChatIds.size > 0) {
                     setBulkDeleteMode(false);
                     setSelectedChatIds(new Set());
@@ -140,6 +150,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (e.key == "ArrowDown") {
                 e.preventDefault();
                 e.stopPropagation();
+                if (renameId) return;
+
                 let i = selected[0] + 1;
                 if (i >= filteredChats.length) {
                     i = filteredChats.length - 1 < 0 ? 0 : filteredChats.length - 1;
@@ -149,30 +161,49 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (e.key == "ArrowUp") {
                 e.preventDefault();
                 e.stopPropagation();
+                if (renameId) return;
+
                 let i = selected[0] - 1;
                 if (i < 0) {
                     i = 0;
                 }
                 setSelected([i, 1]);
             }
+            if (e.ctrlKey && e.key == "r") {
+                e.preventDefault();
+                e.stopPropagation();
+
+                setPendingDeleteId(null);
+                if (pendingDeleteTimeout.current) clearTimeout(pendingDeleteTimeout.current);
+
+                const chat = filteredChats[selected[0]];
+                setRenameId(chat.id);
+            }
             if (e.key == "Enter") {
                 e.preventDefault();
                 e.stopPropagation();
+
+                // Use filteredChats for selection actions
+                const chat = filteredChats[selected[0]];
+
+                // Rename takes priority
+                if (renameId && chatTitleRename) {
+                    handleRenameSave(chat.id, selected[0]);
+                    return;
+                }
 
                 if (bulkDeleteMode && selectedChatIds.size > 0) {
                     handleBulkDelete();
                     return;
                 }
 
-                // Use filteredChats for selection actions
-                const chat = filteredChats[selected[0]];
                 if (!chat) return;
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
                         clearTimeout(pendingDeleteTimeout.current);
                         pendingDeleteTimeout.current = null;
                     }
-                    handleDelete(chat.id);
+                    handleDelete(chat.id, selected[0]);
                 } else if (!chat || pendingDeleteId !== chat.id) {
                     createTab(chat);
                 }
@@ -181,6 +212,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 e.preventDefault();
                 e.stopPropagation();
 
+                // Rename takes priority
+                if (renameId) {
+                    // Cancel rename
+                    setRenameId(null);
+                    setChatTitleRename(null);
+                }
+
                 if (bulkDeleteMode && selectedChatIds.size > 0) {
                     handleBulkDelete();
                     return;
@@ -193,7 +231,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         clearTimeout(pendingDeleteTimeout.current);
                         pendingDeleteTimeout.current = null;
                     }
-                    handleDelete(chat.id);
+                    handleDelete(chat.id, selected[0]);
                 } else if (pendingDeleteId !== chat.id) {
                     setPendingDeleteId(chat.id);
                     if (pendingDeleteTimeout.current) {
@@ -210,7 +248,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         if (hiddenOuter) {
             window.onkeydown = null;
         } else {
-            if (!isTouchDevice) inputRef.current?.focus();
+            if (!isTouchDevice && !renameId) inputRef.current?.focus();
             window.onkeydown = onKeyDown;
         }
         return () => {
@@ -222,7 +260,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hiddenOuter, localChats.chats, pendingDeleteId, onDismiss, selected, hidden, isTouchDevice, bulkDeleteMode, selectedChatIds]);
+    }, [hiddenOuter, localChats.chats, pendingDeleteId, onDismiss, selected, hidden, isTouchDevice, bulkDeleteMode, selectedChatIds, renameId, chatTitleRename]);
 
     // Clean up touch timeouts when bulk mode changes
     useEffect(() => {
@@ -249,7 +287,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     useEffect(() => {
         if (!hidden) {
             if (isLoading) return;
-            (async function () {
+            (async function() {
                 const chats = await fetch("/api/chat").then(res => res.json() as Promise<GetChatsResponse | ApiError>);
                 setLocalChats(chats && !("error" in chats) ? chats : {
                     chats: [],
@@ -329,11 +367,44 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         }, DELETE_ANIMATION_DURATION);
     };
 
+    const handleRenameSave = useCallback(async (chatId: string, idx: number) => {
+        if (!chatTitleRename) return;
+        setRenameId(null);
+
+        try {
+            const chat = localChats.chats[idx];
+            setLocalChats(prev => {
+                const newChats = { ...prev };
+                newChats.chats[idx].label = chatTitleRename;
+                return newChats;
+            });
+
+            const result = await fetch(`/api/chat/${chatId}`, {
+                method: "POST",
+                body: JSON.stringify({
+                    label: chatTitleRename,
+                }),
+            }).then(res => res.json() as Promise<{ success: string } | ApiError>)
+                .catch(() => null);
+            if (!result) {
+                setLocalChats(prev => {
+                    const newChats = { ...prev };
+                    newChats.chats[idx].label = chat.label;
+                    return newChats;
+                });
+                return;
+            }
+        } finally { // Hacky way to do defer in JS.
+            setChatTitleRename(null);
+            mutate(); // revalidate SWR
+        }
+    }, [chatTitleRename, localChats, mutate])
+
     // Handle delete with animation
-    const handleDelete = async (chatId: string) => {
+    const handleDelete = async (chatId: string, idx: number) => {
         setPendingDeleteId(null);
+
         // Find index of chat to be deleted
-        const idxToDelete = localChats.chats.findIndex(c => c.id === chatId);
         setDeletingId(chatId);
         setTimeout(async () => {
             const result = await fetch(`/api/chat/${chatId}`, { method: "DELETE" }).then(res => res.json() as Promise<{ success: string } | ApiError>).catch(() => null);
@@ -344,8 +415,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             setLocalChats(prev => {
                 const newChats = prev.chats.filter(c => c.id !== chatId);
                 // If the deleted chat was selected and was the last, move selection to new last
-                if (idxToDelete === selected[0]) {
-                    let newIdx = idxToDelete;
+                if (idx === selected[0]) {
+                    let newIdx = idx;
                     if (newIdx >= newChats.length) newIdx = newChats.length - 1;
                     setSelected([Math.max(0, newIdx), 0]);
                 }
@@ -420,7 +491,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     // Platform shortcut label (fix hydration)
     const [shortcutLabel, setShortcutLabel] = useState("CTRL+K");
     useEffect(() => {
-        if (typeof window !== "undefined" && navigator.platform.toLowerCase().includes("mac")) {
+        if (typeof window !== "undefined" && navigator.userAgent.toLowerCase().includes("mac")) {
             setShortcutLabel("CMD+K");
         } else {
             setShortcutLabel("CTRL+K");
@@ -440,6 +511,17 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             const [lastIdx, lastDir] = lastSelectedRef.current;
             const idx = Math.max(0, Math.min(lastIdx, filteredChats.length - 1));
             setSelected([idx, lastDir]);
+
+            if (!selectedRef.current) return;
+            selectedRef.current.hidden = false;
+        } else if (!filteredChats.length) {
+            if (!selectedRef.current) return;
+            selectedRef.current.hidden = true;
+        }
+
+        if (hidden) {
+            setRenameId(null);
+            setChatTitleRename(null);
         }
     }, [hidden, filteredChats.length]);
 
@@ -578,7 +660,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 `}
                     onClick={() => inputRef.current?.focus()}
                 >
-                    <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center">
+                    <div className="bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center aspect-square">
                         <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path opacity="0.9" d="M6.37204 1.29353C6.46301 0.828376 6.50849 0.595801 6.60694 0.595843C6.70538 0.595885 6.75067 0.828499 6.84124 1.29373L7.18501 3.05959C7.49945 4.67474 7.65667 5.48232 8.07585 6.12959C8.31594 6.50033 8.61602 6.82856 8.96381 7.10084C9.571 7.57622 10.3613 7.80504 11.942 8.26268C12.3106 8.36941 12.495 8.42278 12.5315 8.51159C12.5515 8.56015 12.5515 8.61464 12.5315 8.66321C12.495 8.75202 12.3107 8.80538 11.942 8.9121C10.3618 9.3696 9.57174 9.59835 8.96466 10.0736C8.61643 10.3461 8.31601 10.6748 8.07573 11.0461C7.65686 11.6933 7.49985 12.5007 7.18582 14.1156L6.84125 15.8875C6.75069 16.3532 6.7054 16.5861 6.60694 16.5861C6.50847 16.5861 6.46299 16.3533 6.37203 15.8877L6.10216 14.5062C5.71138 12.5058 5.51599 11.5056 4.92333 10.7508C4.79982 10.5935 4.66465 10.4458 4.51896 10.3088C3.81982 9.65147 2.84091 9.36806 0.883087 8.80122C0.607498 8.72143 0.469704 8.68154 0.456627 8.60844C0.454137 8.59452 0.454137 8.58027 0.456627 8.56635C0.469704 8.49325 0.607505 8.45335 0.883108 8.37356C2.84144 7.80658 3.8206 7.52309 4.51985 6.86551C4.6651 6.72892 4.79988 6.58161 4.92308 6.42483C5.51614 5.67009 5.71178 4.66971 6.10306 2.66894L6.37204 1.29353Z" fill="white" />
                         </svg>
@@ -589,9 +671,11 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         </label>
                         <input ref={inputRef} onInput={onInput} id="search" className="w-full outline-none text-neutral-50/80" />
                     </div>
-                    <div className="bg-white/10 backdrop-blur-xl z-10 px-3 h-8 rounded-xl flex justify-center items-center text-sm font-mono text-neutral-200/65">
-                        {shortcutLabel}
-                    </div>
+                    {!isTouchDevice && (
+                        <div className="bg-white/10 backdrop-blur-xl z-10 px-3 h-8 rounded-xl flex justify-center items-center text-sm font-mono text-neutral-200/65">
+                            {shortcutLabel}
+                        </div>
+                    )}
                 </div>
                 {bulkDeleteMode && (
                     <div className="flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 items-center justify-between backdrop-blur-2xl shadow-highlight rounded-2xl">
@@ -620,12 +704,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 )}
                 <div
                     className={`
-                    flex bg-[rgba(36,36,36,0.75)] items-stretch justify-stretch
-                    backdrop-blur-2xl shadow-highlight rounded-2xl
-                    transition-all duration-250 relative
-                    min-h-0 flex-1
-                    ${hidden ? "!bg-[rgba(36,36,36,0)] !backdrop-blur-none opacity-0" : ""}
-                `}
+                        flex bg-[rgba(36,36,36,0.75)] items-stretch justify-stretch
+                        backdrop-blur-2xl shadow-highlight rounded-2xl
+                        transition-all duration-250 relative
+                        min-h-0 flex-1
+                        ${hidden ? "!bg-[rgba(36,36,36,0)] !backdrop-blur-none opacity-0" : ""}
+                    `}
                 >
                     <ul ref={listRef} className="flex flex-col items-stretch justify-stretch w-full mim-h-0 flex-1 overflow-y-auto overflow-x-clip transition-all duration-200 relative">
                         {!bulkDeleteMode && !isTouchDevice && (
@@ -650,7 +734,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 <li className="px-4 py-2 text-xs text-neutral-400 font-semibold select-none">
                                     {section.section}
                                 </li>
-                                {section.chats.map((chat, _) => {
+                                {section.chats.map((chat, idx) => {
                                     // Flat index in filteredChats
                                     const flatIdx = filteredChats.findIndex(c => c.id === chat.id);
                                     const isSelected = selectedChatIds.has(chat.id);
@@ -667,17 +751,19 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                 ${isSelected ? "bg-blue-500/20 border border-blue-500/50" : flatIdx !== selected[0] ? "hover:bg-white/[0.03]" : ""} 
                                                 rounded-2xl transition-all duration-200 overflow-clip
                                                 hover:[&>#delete]:!opacity-100 hover:[&>#delete]:!translate-0 
+                                                group
                                                 ${isDeleting ? "chat-delete-anim" : ""}
                                                 ${isLongPressing ? "chat-long-press" : ""}
                                             `}
                                             onTouchStart={e => {
                                                 if (!isTouchDevice) return;
-                                                
+                                                if (renameId === chat.id) return;
+
                                                 const target = e.target as HTMLElement;
                                                 if (
-                                                    target.id === "delete" ||
-                                                    target.parentElement?.id === "delete" ||
-                                                    target.parentElement?.parentElement?.id === "delete"
+                                                    target.classList.contains("child-button") ||
+                                                    target.parentElement?.classList?.contains("child-button") ||
+                                                    target.parentElement?.parentElement?.classList?.contains("child-button")
                                                 ) return;
 
                                                 touchStartRef.current = {
@@ -690,12 +776,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     if (touchStartRef.current?.chatId === chat.id) {
                                                         // Add long press animation
                                                         setLongPressActive(chat.id);
-                                                        
+
                                                         // Trigger haptic feedback if available
                                                         if ("vibrate" in navigator) {
                                                             navigator.vibrate(50);
                                                         }
-                                                        
+
                                                         // Enter bulk mode and select this chat
                                                         setBulkDeleteMode(true);
                                                         setSelectedChatIds(prev => {
@@ -703,24 +789,25 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                             newSet.add(chat.id);
                                                             return newSet;
                                                         });
-                                                        
+
                                                         // Remove animation after it completes
                                                         setTimeout(() => setLongPressActive(null), 500);
-                                                        
+
                                                         touchStartRef.current = null;
                                                     }
                                                 }, 500);
                                             }}
-                                            onTouchEnd={e => {
+                                            onTouchEnd={_ => {
                                                 if (!isTouchDevice) return;
-                                                
+                                                if (renameId === chat.id) return;
+
                                                 if (touchTimeoutRef.current) {
                                                     clearTimeout(touchTimeoutRef.current);
                                                     touchTimeoutRef.current = null;
                                                 }
-                                                
+
                                                 setLongPressActive(null);
-                                                
+
                                                 // If we're in bulk mode, handle tap as selection toggle
                                                 if (bulkDeleteMode && touchStartRef.current) {
                                                     const touchDuration = Date.now() - touchStartRef.current.startTime;
@@ -743,10 +830,10 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         createTab(chat);
                                                     }
                                                 }
-                                                
+
                                                 touchStartRef.current = null;
                                             }}
-                                            onTouchMove={e => {
+                                            onTouchMove={_ => {
                                                 // Cancel long press if user moves finger
                                                 if (touchTimeoutRef.current) {
                                                     clearTimeout(touchTimeoutRef.current);
@@ -758,12 +845,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                             onClick={e => {
                                                 // Skip click handling on touch devices to avoid conflicts
                                                 if (isTouchDevice) return;
-                                                
+                                                if (renameId === chat.id) return;
+
                                                 const clickTarget = e.target as HTMLElement;
                                                 if (
-                                                    clickTarget.id === "delete" ||
-                                                    clickTarget.parentElement?.id === "delete" ||
-                                                    clickTarget.parentElement?.parentElement?.id === "delete"
+                                                    clickTarget.classList.contains("child-button") ||
+                                                    clickTarget.parentElement?.classList?.contains("child-button") ||
+                                                    clickTarget.parentElement?.parentElement?.classList?.contains("child-button")
                                                 ) return;
 
                                                 if (e.shiftKey) {
@@ -819,56 +907,122 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     </g>
                                                 </svg>
                                             </div>
-                                            <span className="flex-1 truncate">{chat.label ?? "New Chat"}</span>
+                                            {renameId !== chat.id ? (
+                                                <span className="flex-1 truncate">{chat.label ?? "New Chat"}</span>
+                                            ) : (
+                                                <input
+                                                    autoFocus onFocus={e => {
+                                                        e.currentTarget.select();
+                                                    }}
+                                                    className="flex-1 outline-none transition-all duration-250 py-1 focus:py-2 focus:px-2 border-2 border-white/50 focus:border-1 focus:border-white/10 rounded-lg focus:bg-black/10"
+                                                    onInput={(e) => setChatTitleRename(e.currentTarget.value)} onChange={(e) => setChatTitleRename(e.currentTarget.value)} value={chatTitleRename ?? chat.label ?? "New Chat"}
+                                                />
+                                            )}
                                             <span className="ml-2 text-xs text-neutral-400 font-mono">{timeLabel}</span>
-                                            {/* ...existing delete button... */}
                                             {!bulkDeleteMode && (
-                                                <div
-                                                    id="delete"
-                                                    style={{
-                                                        opacity: flatIdx === selected[0] ? 1 : -1,
-                                                        translate: flatIdx === selected[0] ? "0 0" : "50px 0",
-                                                        background: pendingDeleteId === chat.id ? "#ef4444" : undefined,
-                                                        color: pendingDeleteId === chat.id ? "#fff" : undefined,
-                                                        border: pendingDeleteId === chat.id ? "1px solid #ef4444" : undefined,
-                                                        width: 32, height: 32, position: "relative",
-                                                    }}
-                                                    className={`
-                                                        bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
-                                                        hover:opacity-100 hover:translate-0 hover:bg-white/20
-                                                        ${pendingDeleteId === chat.id ? "!bg-red-500 !text-white" : ""}
-                                                    `}
-                                                    onClick={e => {
-                                                        e.stopPropagation();
-                                                        if (deletingId) return;
-                                                        if (pendingDeleteId === chat.id) {
-                                                            if (pendingDeleteTimeout.current) {
-                                                                clearTimeout(pendingDeleteTimeout.current);
-                                                                pendingDeleteTimeout.current = null;
+                                                <div className="flex gap-3 group-hover:group">
+                                                    {/* rename */}
+                                                    <div
+                                                        style={{
+                                                            opacity: flatIdx === selected[0] ? 1 : -1,
+                                                            translate: flatIdx === selected[0] ? "0 0" : "50px 0",
+                                                            color: renameId === chat.id ? "#fff !important" : undefined,
+                                                            width: 32, height: 32, position: "relative",
+                                                        }}
+                                                        className={`
+                                                            bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
+                                                            group-hover:!opacity-100 group-hover:!translate-0 hover:!bg-white/20
+
+                                                            child-button
+                                                        `}
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            if (renameId === chat.id) {
+                                                                handleRenameSave(chat.id, idx);
+                                                                setChatTitleRename(null);
+                                                                setRenameId(null);
+                                                            } else {
+                                                                setRenameId(chat.id);
+                                                                // Cancel deleting
+                                                                setPendingDeleteId(null);
+                                                                if (pendingDeleteTimeout.current) clearTimeout(pendingDeleteTimeout.current);
                                                             }
-                                                            handleDelete(chat.id);
-                                                        } else {
-                                                            setPendingDeleteId(chat.id);
-                                                            if (pendingDeleteTimeout.current) {
-                                                                clearTimeout(pendingDeleteTimeout.current);
+                                                        }}
+                                                    >
+                                                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: renameId === chat.id ? "scale(0)" : "scale(1)", zIndex: renameId === chat.id ? 0 : 1 }}>
+                                                            {/* Edit SVG */}
+                                                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M11.542 2C14.0082 2 16.0078 3.9996 16.0078 6.46582V11.5342C16.0078 11.7836 15.7087 11.8082 15.6338 11.5703L14.998 9.55176L14.2705 7.24023C14.2623 7.21429 14.2578 7.18736 14.2578 7.16016V6.46582C14.2578 4.9661 13.0417 3.75 11.542 3.75H6.47363C4.97391 3.75 3.75781 4.9661 3.75781 6.46582V11.5342C3.75781 13.0339 4.97391 14.25 6.47363 14.25H7.15332C7.17931 14.25 7.20558 14.2543 7.23047 14.2617L9.5918 14.9697L11.6562 15.5879C11.9179 15.6662 11.8987 15.9935 11.626 15.999C11.5982 15.9996 11.5699 16 11.542 16H6.47363L6.24316 15.9941C3.8839 15.8744 2.00781 13.9232 2.00781 11.5342V6.46582C2.00781 4.07679 3.8839 2.12563 6.24316 2.00586L6.47363 2H11.542ZM13.3467 11.4922C13.5664 11.2724 13.9412 11.3613 14.0391 11.6562L14.9219 14.3174C15.0289 14.6398 14.7268 14.9488 14.4023 14.8486L11.6953 14.0107C11.395 13.9178 11.3012 13.5388 11.5234 13.3164L13.3467 11.4922ZM6.61523 5.96875C6.98641 5.59759 7.5821 5.57586 7.97852 5.91992L12.2725 9.64844L9.63379 12.2881L6.02539 7.82422C5.70385 7.42645 5.73405 6.84996 6.0957 6.48828L6.61523 5.96875Z" fill="white" />
+                                                            </svg>
+                                                        </span>
+                                                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: renameId === chat.id ? "scale(1)" : "scale(0)", zIndex: renameId === chat.id ? 1 : 0 }}>
+                                                            {/* Checkmark SVG */}
+                                                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
+                                                            </svg>
+                                                        </span>
+                                                    </div>
+                                                    {/* delete */}
+                                                    <div
+                                                        style={{
+                                                            opacity: flatIdx === selected[0] ? 1 : -1,
+                                                            translate: flatIdx === selected[0] ? "0 0" : "50px 0",
+                                                            color: pendingDeleteId === chat.id ? "#fff !important" : undefined,
+                                                            border: pendingDeleteId === chat.id && renameId !== chat.id ? "1px solid #ef4444" : undefined,
+                                                            width: 32, height: 32, position: "relative",
+                                                        }}
+                                                        className={`
+                                                                bg-white/10 backdrop-blur-xl z-10 w-8 h-8 rounded-xl text-transparent flex justify-center items-center cursor-pointer ml-auto transition-all duration-200
+                                                                group-hover:!opacity-100 group-hover:!translate-0 hover:bg-white/20
+                                                                ${pendingDeleteId === chat.id && renameId !== chat.id ? "!bg-red-500" : ""}
+
+                                                                child-button
+                                                            `}
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            if (renameId === chat.id) {
+                                                                setChatTitleRename(null);
+                                                                setRenameId(null);
+                                                                return;
                                                             }
-                                                            pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
-                                                        }
-                                                    }}
-                                                >
-                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? "scale(0)" : "scale(1)", zIndex: pendingDeleteId === chat.id ? 0 : 1 }}>
-                                                        {/* Trash SVG */}
-                                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
-                                                            <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
-                                                            <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
-                                                </svg>
-                                                    </span>
-                                                    <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id ? "scale(1)" : "scale(0)", zIndex: pendingDeleteId === chat.id ? 1 : 0 }}>
-                                                        {/* Checkmark SVG */}
-                                                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                            <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
-                                                        </svg>
-                                                    </span>
+
+                                                            if (deletingId) return;
+                                                            if (pendingDeleteId === chat.id) {
+                                                                if (pendingDeleteTimeout.current) {
+                                                                    clearTimeout(pendingDeleteTimeout.current);
+                                                                    pendingDeleteTimeout.current = null;
+                                                                }
+                                                                handleDelete(chat.id, idx);
+                                                            } else {
+                                                                setPendingDeleteId(chat.id);
+                                                                if (pendingDeleteTimeout.current) {
+                                                                    clearTimeout(pendingDeleteTimeout.current);
+                                                                }
+                                                                pendingDeleteTimeout.current = setTimeout(() => setPendingDeleteId(id => id === chat.id ? null : id), 3000);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id || renameId === chat.id ? "scale(0)" : "scale(1)", zIndex: pendingDeleteId === chat.id || renameId === chat.id ? 0 : 1 }}>
+                                                            {/* Trash SVG */}
+                                                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-200">
+                                                                <rect x="4.01562" y="1.95166" width="9.96755" height="1.88327" rx="0.941634" fill="white" />
+                                                                <path d="M12.9915 5.20386C13.5677 5.20391 14.0246 5.6903 13.9896 6.26538L13.4642 14.8933C13.4321 15.421 12.9949 15.8328 12.4662 15.8328H5.59311C5.06695 15.8326 4.63122 15.4242 4.59604 14.8992L4.01791 6.27124C3.97923 5.69402 4.4365 5.204 5.01498 5.20386H12.9915ZM11.2523 6.53979L10.888 14.7185L12.1292 14.6794L12.4945 6.50171L11.2523 6.53979ZM5.98471 14.6794H7.26693L6.90268 6.50171H5.61947L5.98471 14.6794ZM8.42025 14.6794H9.73764L9.73471 6.50171H8.41732L8.42025 14.6794Z" fill="white" />
+                                                            </svg>
+                                                        </span>
+                                                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDeleteId === chat.id && renameId !== chat.id ? "scale(1)" : "scale(0)", zIndex: pendingDeleteId === chat.id && renameId !== chat.id ? 1 : 0 }}>
+                                                            {/* Checkmark SVG */}
+                                                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M3.5 9.5208L7.63598 13.1296L14.5 4.87061" stroke="white" strokeWidth="2.5" />
+                                                            </svg>
+                                                        </span>
+                                                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: renameId === chat.id ? "scale(1)" : "scale(0)", zIndex: renameId === chat.id ? 1 : 0 }}>
+                                                            {/* Cancel SVG */}
+                                                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                <path d="M4.73828 14.1278L13.2614 3.87256" stroke="white" strokeWidth="2" />
+                                                                <path d="M3.8737 4.73877L14.1289 13.2619" stroke="white" strokeWidth="2" />
+                                                            </svg>
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             )}
                                         </li>
@@ -883,7 +1037,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         )}
                     </ul>
                 </div>
-            </div>
+            </div >
         </>
     );
 }

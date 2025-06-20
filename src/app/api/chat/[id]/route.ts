@@ -45,6 +45,48 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     } as ChatResponse, { status: 200 });
 }
 
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    if (!redis) {
+        return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 200 });
+    }
+
+    try {
+        const updateBody = await req.json() as {
+            label?: string;
+        };
+
+        // Check if no fields are provided in the body
+        if (!updateBody.label) { // It's just label atm, model/provider can't be changed via updating the chat only by sending
+            return NextResponse.json({ error: "At least one field is required (label)" } as ApiError, { status: 400 });
+        }
+        const user = await currentUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 200 });
+        if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 200 });
+
+        const { id } = await params;
+
+        const rawChat = await redis.hget(USER_CHATS_KEY(user.id), id);
+        if (!rawChat) return NextResponse.json({ error: "Chat not found" } as ApiError, { status: 200 });
+        const chat = JSON.parse(rawChat);
+
+        // If label is provided, update label
+        if (updateBody.label) {
+            chat.label = updateBody.label;
+        }
+
+        // Update the chat
+        const updated = await redis.hset(USER_CHATS_KEY(user.id), id, JSON.stringify(chat));
+        if (!updated) {
+            return NextResponse.json({ error: "Failed to update chat" } as ApiError, { status: 500 });
+        }
+
+        return NextResponse.json({ success: "Updated chat successfully" }, { status: 200 });
+    } catch (error) {
+        console.error("Unknown error occurred while updating a chat: ", (error as Error).message);
+        return NextResponse.json({ error: "An unknown error occurred" }, { status: 500 });
+    }
+}
+
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     if (!redis) {
         return NextResponse.json({ error: "Redis connection failure" } as ApiError, { status: 500 });
@@ -54,9 +96,9 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
         const user = await currentUser();
         if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
         if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 401 });
-    
+
         const { id } = await params;
-    
+
         // Delete all files belonging to this chat
         const USER_FILES_KEY_CONST = USER_FILES_KEY(user.id);
         const files = await redis.hgetall(USER_FILES_KEY_CONST);
@@ -76,24 +118,24 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
                 console.error(`Failed to delete file ${randomName} for chat ${id}:`, error);
             }
         }
-    
+
         // Use a transaction to delete both chat data and messages
         const result = await redis.multi()
             .hdel(USER_CHATS_KEY(user.id), id)
             .del(CHAT_MESSAGES_KEY(id))
             .zrem(USER_CHATS_INDEX_KEY(user.id), id)
             .exec();
-    
+
         // Clean the redis stream to prevent duplicates
         await redis.del(MESSAGE_STREAM_KEY(id)).catch((err) => {
             console.error("Failed to trim message stream:", err);
         });
-    
+
         // Check if chat deletion was successful (first operation)
         if (!result || result[0][1] === 0) {
             return NextResponse.json({ error: "Failed to delete chat" } as ApiError, { status: 404 });
         }
-    
+
         return NextResponse.json({ success: "Chat deleted" }, { status: 200 });
     } catch (error) {
         console.error("Error deleting chat:", error);
