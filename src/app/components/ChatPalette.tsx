@@ -120,7 +120,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     // Keyboard navigation
     useEffect(() => {
         const onKeyDown: typeof window.onkeydown = (e) => {
-            if (e.key == "Escape") {
+            // Confirmation/Cancelation buttons
+            if (!e.shiftKey && !e.ctrlKey && !e.altKey && e.key == "Escape") {
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -147,42 +148,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     onDismiss();
                 }
             }
-
-            // Navigation
-            if (e.key == "ArrowDown") {
-                e.preventDefault();
-                e.stopPropagation();
-                if (renameId) return;
-
-                let i = selected[0] + (e.ctrlKey ? 5 : 1);
-                if (i >= filteredChats.length) {
-                    i = filteredChats.length - 1 < 0 ? 0 : filteredChats.length - 1;
-                }
-                setSelected([i, -1]);
-            }
-            if (e.key == "ArrowUp") {
-                e.preventDefault();
-                e.stopPropagation();
-                if (renameId) return;
-
-                let i = selected[0] - (e.ctrlKey ? 5 : 1);
-                if (i < 0) {
-                    i = 0;
-                }
-                setSelected([i, 1]);
-            }
-
-            if (e.ctrlKey && e.key == "r") {
-                e.preventDefault();
-                e.stopPropagation();
-
-                setPendingDeleteId(null);
-                if (pendingDeleteTimeout.current) clearTimeout(pendingDeleteTimeout.current);
-
-                const chat = filteredChats[selected[0]];
-                setRenameId(chat.id);
-            }
-            if (e.key == "Enter") {
+            if (!e.shiftKey && !e.ctrlKey && !e.altKey && e.key == "Enter") {
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -214,7 +180,43 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     createTab(chat);
                 }
             }
-            if (e.key === "Delete" || (e.shiftKey && e.key === "Backspace")) {
+
+            // Navigation
+            if (!e.shiftKey && !e.altKey && e.key == "ArrowDown") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (renameId) return;
+
+                let i = selected[0] + (e.ctrlKey ? 5 : 1);
+                if (i >= filteredChats.length) {
+                    i = filteredChats.length - 1 < 0 ? 0 : filteredChats.length - 1;
+                }
+                setSelected([i, -1]);
+            }
+            if (!e.shiftKey && !e.altKey && e.key == "ArrowUp") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (renameId) return;
+
+                let i = selected[0] - (e.ctrlKey ? 5 : 1);
+                if (i < 0) {
+                    i = 0;
+                }
+                setSelected([i, 1]);
+            }
+
+            // Action buttons
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key == "r") {
+                e.preventDefault();
+                e.stopPropagation();
+
+                setPendingDeleteId(null);
+                if (pendingDeleteTimeout.current) clearTimeout(pendingDeleteTimeout.current);
+
+                const chat = filteredChats[selected[0]];
+                setRenameId(chat.id);
+            }
+            if (!e.ctrlKey && !e.altKey && ((!e.shiftKey && e.key === "Delete") || (e.shiftKey && e.key === "Backspace"))) {
                 e.preventDefault();
                 e.stopPropagation();
 
