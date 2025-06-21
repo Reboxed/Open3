@@ -1,7 +1,7 @@
 import { Message } from "@/app/lib/types/ai";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY, USER_FILES_KEY, MESSAGE_STREAM_KEY } from "@/internal-lib/redis";
+import redis, { USER_CHATS_KEY, USER_CHATS_INDEX_KEY, CHAT_MESSAGES_KEY, USER_FILES_KEY, MESSAGE_STREAM_KEY, USER_PINNED_CHATS_KEY } from "@/internal-lib/redis";
 import { join } from "path";
 import { unlink } from "fs/promises";
 import { ApiError } from "@/internal-lib/types/api";
@@ -10,6 +10,7 @@ import { ApiError } from "@/internal-lib/types/api";
 interface ChatResponse {
     id: string;
     label: string;
+    pinned?: boolean;
     model: string;
     provider: string;
     history: Message[];
@@ -53,12 +54,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     try {
         const updateBody = await req.json() as {
             label?: string;
+            pinned?: boolean;
         };
 
         // Check if no fields are provided in the body
-        if (!updateBody.label) { // It's just label atm, model/provider can't be changed via updating the chat only by sending
-            return NextResponse.json({ error: "At least one field is required (label)" } as ApiError, { status: 400 });
+        if (updateBody.label === undefined && updateBody.pinned === undefined) { // It's just label atm, model/provider can't be changed via updating the chat only by sending
+            return NextResponse.json({ error: "At least one field is required (label, pinned)" } as ApiError, { status: 400 });
         }
+
         const user = await currentUser();
         if (!user) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 200 });
         if (user.banned) return NextResponse.json({ error: "Unauthorized" } as ApiError, { status: 200 });
@@ -70,16 +73,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const chat = JSON.parse(rawChat);
 
         // If label is provided, update label
-        if (updateBody.label) {
-            chat.label = updateBody.label;
+        if (updateBody.label !== undefined && updateBody.label.trim() !== "") {
+            if (updateBody.label.trim().length > 100) {
+                return NextResponse.json({ error: "Label is too long, maximum length is 100 characters" } as ApiError, { status: 400 });
+            }
+            chat.label = updateBody.label.trim();
+        }
+        // If pinned is provided, update pinned
+        if (updateBody.pinned !== undefined) {
+            if (updateBody.pinned) {
+                await redis.zadd(USER_PINNED_CHATS_KEY(user.id), Date.now(), id);
+            } else {
+                await redis.zrem(USER_PINNED_CHATS_KEY(user.id), id);
+            }
+            chat.pinned = updateBody.pinned;
         }
 
         // Update the chat
-        const updated = await redis.hset(USER_CHATS_KEY(user.id), id, JSON.stringify(chat));
-        if (!updated) {
-            return NextResponse.json({ error: "Failed to update chat" } as ApiError, { status: 500 });
-        }
-
+        await redis.hset(USER_CHATS_KEY(user.id), id, JSON.stringify(chat));
         return NextResponse.json({ success: "Updated chat successfully" }, { status: 200 });
     } catch (error) {
         console.error("Unknown error occurred while updating a chat: ", (error as Error).message);
