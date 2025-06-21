@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState, useRef, FormEventHandler, useMemo } from "react";
-import Dropdown from "./Dropdown";
+import Dropdown from "./DropdownGrid";
 import { ModelCapabilities } from "../lib/types/ai";
 import { escape as escapeHtml } from "html-escaper";
 import { getAllModelCapabilities } from "@/internal-lib/utils/getAllModelCapabilities";

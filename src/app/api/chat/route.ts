@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "@/app/lib/types/ai";
 import { Chat } from "@/app/lib/types/ai";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
+import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY, USER_PINNED_CHATS_KEY } from "@/internal-lib/redis";
 import "@/internal-lib/redis";
 import { byokAvailable } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit - 1;
 
-    const chatIds = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), startIndex, endIndex);
+    const chatIds = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), startIndex, endIndex).catch((err) => {
+        console.error("Error fetching chat IDs:", err);
+        return [] as string[];
+    });
     if (chatIds.length === 0) {
         return NextResponse.json({
             chats: [],
@@ -39,9 +42,15 @@ export async function GET(req: NextRequest) {
             hasMore: false
         }, { status: 200 });
     }
+    const pinnedChatIds = await redis.smembers(USER_PINNED_CHATS_KEY(user.userId)).catch((err) => {
+        console.error("Error fetching pinned chat IDs:", err);
+        return [] as string[];
+    });
+    // Remove all pinned chat IDs from the main chat IDs list
+    const filteredChatIds = chatIds.filter(id => !pinnedChatIds.includes(id));
 
     // Get chat data from hash
-    const rawChats = await redis.hmget(USER_CHATS_KEY(user.userId), ...chatIds);
+    const rawChats = await redis.hmget(USER_CHATS_KEY(user.userId), ...pinnedChatIds, ...filteredChatIds);
     const chats = rawChats
         .map((chatStr, i) => {
             try {

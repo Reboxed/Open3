@@ -6,7 +6,7 @@ import ModelProviderClientWrapper from "./ModelProviderClientWrapper";
 async function fetchModelProvider(chatId: string) {
   // You may need to pass cookies/headers for auth if required
   const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/chat/${chatId}`,
-    { headers: { Cookie: cookies().toString() } }
+    { headers: { Cookie: (await cookies()).toString() } }
   );
   if (!res.ok) return { model: null, provider: null };
   const data = await res.json();

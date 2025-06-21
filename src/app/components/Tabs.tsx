@@ -56,6 +56,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
 
     const router = useRouter();
     const onTabChangeClick = useCallback(async (idx: number) => {
+        setActiveTab(idx);
         const tab = tabs[idx];
         let eventCanceled = false;
         const event = {
@@ -64,7 +65,6 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
             },
         } as TabChangeEvent;
         onTabChange?.(event, tabs[activeTab], tab);
-        setActiveTab(idx);
         if (eventCanceled) return;
         if (tab?.link) router.push(tab.link);
     }, [tabs, activeTab, onTabChange, router]);
@@ -184,7 +184,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     const [closeShortcut, setCloseShortcut] = useState("Alt+W");
     useEffect(() => {
         const isMac = navigator.userAgent.toLowerCase().includes("mac");
-        setCloseShortcut(isMac ? "⌥W" : "Alt+W");
+        setCloseShortcut(isMac ? "⌥ W" : "Alt+W");
     }, []);
 
     return (

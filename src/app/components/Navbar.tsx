@@ -129,12 +129,12 @@ export function Navbar() {
             const isMac = navigator.userAgent.toLowerCase().includes("mac");
             if ((isMac && e.metaKey && e.key.toLowerCase() === "k") || (!isMac && e.ctrlKey && e.key.toLowerCase() === "k")) {
                 e.preventDefault();
-                setShowPalette(true);
+                setShowPalette(!showPalette);
             }
         }
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, []);
+    }, [showPalette]);
 
     // Listen for chat title updates from fallback title generation
     useEffect(() => {
