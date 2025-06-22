@@ -221,7 +221,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                     className={`opacity-40 ml-1.5 ${!shown ? "scale-100" : "-scale-100"} transition-all`}
                 />
             </button>
-            <div className={`z-20 fixed top-0 left-0 w-full h-full cursor-default ${!shown ? "hidden" : ""}`}/>
+            <div className={`z-5 fixed top-0 left-0 w-full h-full cursor-default ${!shown ? "hidden" : ""}`}/>
             {(shown || isClosing) && dropdownPosition && typeof window !== "undefined" && document.body && ReactDOM.createPortal(
                 <>
                     <style>{`
@@ -243,7 +243,7 @@ export default function Dropdown({ className, label, items: options, name, optio
                     <div
                         id="dropdown"
                         ref={dropdownRef}
-                        className={`absolute w-max mx-auto dropdown transition-all z-50 shadow-highlight rounded-3xl ${isClosing ? "dropdown-fadeout" : "dropdown-fadein"}`}
+                        className={`absolute w-max mx-auto dropdown transition-all z-5 shadow-highlight rounded-3xl ${isClosing ? "dropdown-fadeout" : "dropdown-fadein"}`}
                         style={{
                             position: "absolute",
                             left: Math.max(dropdownPosition.left - 24, 8),

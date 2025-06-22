@@ -31,7 +31,7 @@ export default async function RootLayout({
             <ClerkProvider>
                 <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative flex flex-col min-h-screen w-full max-sm:text-sm`}>
                     <Navbar />
-                    <main className="w-full min-h-0 flex-1 flex flex-col">
+                    <main className="w-full mt-[60px] min-h-0 flex-1 flex flex-col">
                         {children}
                     </main>
                 </body>

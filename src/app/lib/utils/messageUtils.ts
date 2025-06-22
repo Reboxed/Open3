@@ -2,24 +2,40 @@
 
 import { Message } from "../types/ai";
 
-export async function loadMessagesFromServer(chatId: string): Promise<{
+export async function loadMessagesFromServer(chatId: string, opts?: {
+    page?: number;
+    limit?: number;
+    reverse: boolean;
+}): Promise<{
     messages: Message[];
-    generating: boolean;
+    total: number;
+    page: number;
+    limit: number;
+    hasMore: boolean;
 }> {
     try {
-        const response = await fetch(`/api/chat/${chatId}/messages`);
+        // Validate parameters
+        const parameters = new URLSearchParams();
+        if (opts?.page) parameters.append("page", opts.page.toString());
+        if (opts?.limit) parameters.append("limit", opts.limit.toString());
+        if (opts?.reverse) parameters.append("reverse", opts.reverse.toString());
+
+        const response = await fetch(`/api/chat/${chatId}/messages?${parameters.toString()}`);
         if (!response.ok) {
             // console.error('Failed to load messages:", response.statusText);
-            return { messages: [], generating: false };
+            return { messages: [], total: 0, page: 1, limit: 10, hasMore: false };
         }
         const data = await response.json();
         return {
             messages: data.messages || [],
-            generating: data.generating ?? false,
+            total: data.total || 0,
+            page: data.page || 1,
+            limit: data.limit || 10,
+            hasMore: data.hasMore || false,
         };
     } catch (error) {
         console.error("Error loading messages:", error);
-        return { messages: [], generating: false };
+        return { messages: [], total: 0, page: 1, limit: 10, hasMore: false };
     }
 }
 

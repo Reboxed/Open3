@@ -4,26 +4,26 @@ services:
     container_name: redis-open3
     restart: unless-stopped
     # Uncomment this for development to expose Redis port
-    # ports:
-    #  - "6379:6379"
+    ports:
+     - "6379:6379"
     volumes:
       - redis-data:/data
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
 
   # Comment this out if you want to run a development environment locally
-  web:
-    build: .
-    container_name: open3-web
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - REDIS_URL=redis-open3:6379
-    depends_on:
-      - redis
-    volumes:
-      - upload-data:/app/public/uploads
+  # web:
+  #   build: .
+  #   container_name: open3-web
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - REDIS_URL=redis-open3:6379
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - upload-data:/app/public/uploads
 
 volumes:
   redis-data:

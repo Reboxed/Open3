@@ -113,8 +113,8 @@ export default function Home() {
                         style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                         className={`grid gap-7 max-md:!grid-cols-2 max-sm:!grid-cols-1 mt-5 [&>div]:flex [&>div]:flex-col [&>div]:gap-1 [&>div]:bg-[#222121]/80 [&>div]:rounded-[48px] [&>div]:shadow-[0_8px_20px_rgba(0,0,0,0.1)]/30 [&>div]:p-8 [&>div]:overflow-clip`}
                     >
-                        {recentChats.map(chat => (
-                            <div key={chat.id} className="w-full h-[230px] cursor-pointer" onClick={() => {
+                        {recentChats.map((chat, i) => (
+                            <div key={i} className="w-full h-[230px] cursor-pointer" onClick={() => {
                                 addAndSaveTabsLocally(localStorage, {
                                     id: chat.id,
                                     label: chat.label ?? "New Tab",

@@ -118,6 +118,7 @@ export function Navbar() {
             }
             if (!activeFound && lsTabs.length > 0) router.replace("/");
         }
+        setTabs(lsTabs); // <-- Ensure state is updated so UI re-renders
         cleanTabs(lsTabs);
         // Only update localStorage if tabs changed
         setTabsS(localStorage, lsTabs);
@@ -129,12 +130,12 @@ export function Navbar() {
             const isMac = navigator.userAgent.toLowerCase().includes("mac");
             if ((isMac && e.metaKey && e.key.toLowerCase() === "k") || (!isMac && e.ctrlKey && e.key.toLowerCase() === "k")) {
                 e.preventDefault();
-                setShowPalette(true);
+                setShowPalette(!showPalette);
             }
         }
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, []);
+    }, [showPalette]);
 
     // Listen for chat title updates from fallback title generation
     useEffect(() => {
@@ -152,7 +153,7 @@ export function Navbar() {
     // Add settings button for BYOK
     return (
         <>
-            <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+            <nav className="h-[60px] flex gap-2 pt-3 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
                 <div className="relative shrink-0 flex gap-2 w-full justify-center">
                     <Tabs
                         tabs={[
@@ -162,14 +163,6 @@ export function Navbar() {
                                 label: getTabTitle(t),
                             }))
                         ]}
-                        onTabChange={() => {
-                            const lsTabs = loadTabsLocally(localStorage);
-                            for (let i = 0; i < lsTabs.length; i++) {
-                                lsTabs[i].active = lsTabs[i].link == pathname;
-                                if (lsTabs[i].active) break;
-                            }
-                            setTabs(lsTabs);
-                        }}
                         onTabCreate={() => setShowPalette(true)}
                         onTabClose={tab => {
                             let lsTabs = loadTabsLocally(localStorage);

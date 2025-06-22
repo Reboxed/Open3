@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_PROVIDERS } from "@/app/lib/types/ai";
 import { Chat } from "@/app/lib/types/ai";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY } from "@/internal-lib/redis";
+import redis, { USER_CHATS_INDEX_KEY, USER_CHATS_KEY, USER_PINNED_CHATS_KEY } from "@/internal-lib/redis";
 import "@/internal-lib/redis";
 import { byokAvailable } from "@/internal-lib/utils/byok";
 import { getChatClass } from "@/internal-lib/utils/getChatClass";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     // Pagination parameters
     const page = parseInt(req.nextUrl.searchParams.get("page") || "1");
-    const limit = parseInt(req.nextUrl.searchParams.get("limit") || "50");
+    const limit = parseInt(req.nextUrl.searchParams.get("limit") || "25") +1;
     if (page < 1) {
         return NextResponse.json({ error: "Page must be greater than 0" } as ApiError, { status: 400 });
     }
@@ -29,36 +29,91 @@ export async function GET(req: NextRequest) {
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit - 1;
 
-    const chatIds = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), startIndex, endIndex);
-    if (chatIds.length === 0) {
-        return NextResponse.json({
-            chats: [],
-            total: 0,
-            page,
-            limit,
-            hasMore: false
-        }, { status: 200 });
+    // Fetch all pinned chat IDs (usually few)
+    const pinnedChatIds = await redis.zrevrange(USER_PINNED_CHATS_KEY(user.userId), 0, -1).catch((err) => {
+        console.error("Error fetching pinned chat IDs:", err);
+        return [] as string[];
+    });
+    const totalPinned = pinnedChatIds.length;
+
+    // Calculate how many pinned chats are on this page
+    let paginatedPinned: string[] = [];
+    let paginatedUnpinned: string[] = [];
+    if (startIndex < totalPinned) {
+        // This page includes some pinned chats
+        const pinnedStart = startIndex;
+        const pinnedEnd = Math.min(totalPinned - 1, endIndex);
+        paginatedPinned = pinnedChatIds.slice(pinnedStart, pinnedEnd + 1);
+        // If not enough pinned to fill the page, fill with unpinned
+        const unpinnedNeeded = limit - paginatedPinned.length;
+        if (unpinnedNeeded > 0) {
+            // Unpinned offset is always 0 for first page, or (startIndex - totalPinned) for later pages
+            const unpinnedOffset = Math.max(0, startIndex - totalPinned);
+            // Fetch a large enough window, filter out pinned, then slice for offset and count
+            const fetchWindow = (unpinnedOffset + unpinnedNeeded) * 3;
+            let allUnpinned: string[] = [];
+            let redisOffset = 0;
+            while (allUnpinned.length < unpinnedOffset + unpinnedNeeded) {
+                const batch = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), redisOffset, redisOffset + fetchWindow - 1).catch((err) => {
+                    console.error("Error fetching chat IDs:", err);
+                    return [] as string[];
+                });
+                if (batch.length === 0) break;
+                const filtered = batch.filter(id => !pinnedChatIds.includes(id));
+                allUnpinned = [...allUnpinned, ...filtered];
+                redisOffset += fetchWindow;
+                if (batch.length < fetchWindow) break;
+            }
+            paginatedUnpinned = allUnpinned.slice(unpinnedOffset, unpinnedOffset + unpinnedNeeded);
+        }
+    } else {
+        // This page is after all pinned chats, only unpinned
+        const unpinnedOffset = startIndex - totalPinned;
+        const fetchWindow = (unpinnedOffset + limit) * 3;
+        let allUnpinned: string[] = [];
+        let redisOffset = 0;
+        while (allUnpinned.length < unpinnedOffset + limit) {
+            const batch = await redis.zrevrange(USER_CHATS_INDEX_KEY(user.userId), redisOffset, redisOffset + fetchWindow - 1).catch((err) => {
+                console.error("Error fetching chat IDs:", err);
+                return [] as string[];
+            });
+            if (batch.length === 0) break;
+            const filtered = batch.filter(id => !pinnedChatIds.includes(id));
+            allUnpinned = [...allUnpinned, ...filtered];
+            redisOffset += fetchWindow;
+            if (batch.length < fetchWindow) break;
+        }
+        paginatedUnpinned = allUnpinned.slice(unpinnedOffset, unpinnedOffset + limit);
     }
+    // Merge pinned and unpinned for this page
+    const paginatedChatIds = [...paginatedPinned, ...paginatedUnpinned];
 
     // Get chat data from hash
-    const rawChats = await redis.hmget(USER_CHATS_KEY(user.userId), ...chatIds);
+    const rawChats = await redis.hmget(USER_CHATS_KEY(user.userId), ...paginatedChatIds).catch((err) => {
+        console.error("Error fetching chat data:", err)
+        return [] as string[];
+    });
     const chats = rawChats
         .map((chatStr, i) => {
             try {
                 return chatStr ? {
                     ...JSON.parse(chatStr),
-                    id: chatIds[i],
+                    id: paginatedChatIds[i],
                 } : null;
             } catch (e) {
                 // This is gonna screw me over some day..
-                console.error(`Failed to parse chat ${chatIds[i]}:`, e);
+                console.error(`Failed to parse chat ${paginatedChatIds[i]}:`, e);
                 return null;
             }
         })
         .filter(Boolean); // remove nulls
 
     // Get total count once (not paginated)
-    const total = await redis.zcard(USER_CHATS_INDEX_KEY(user.userId));
+    const totalChats = await redis.zcard(USER_CHATS_INDEX_KEY(user.userId)).catch((err) => {
+        console.error("Error fetching total chat count:", err);
+        return 0;
+    });
+    const total = totalPinned + (totalChats - totalPinned);
 
     return NextResponse.json({
         chats,
@@ -102,7 +157,7 @@ export async function POST(req: NextRequest) {
             } as ChatResponse))
             .zadd(USER_CHATS_INDEX_KEY(user.id), Date.now(), id)
             .exec();
-    
+
         // Check for failure
         if (!result || result.some(([err]) => err)) {
             await redis.hdel(USER_CHATS_KEY(user.id), id);
@@ -114,7 +169,7 @@ export async function POST(req: NextRequest) {
         console.error("Error creating chat:", error);
         return NextResponse.json({ error: "Failed to create chat" } as ApiError, { status: 500 });
     }
-    
+
     return NextResponse.json({
         id,
         model: chat.model,

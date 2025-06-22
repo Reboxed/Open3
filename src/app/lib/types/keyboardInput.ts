@@ -1,0 +1,1 @@
+export type Key = "ArrowUp" | "ArrowDown" | "Escape" | "Enter" | "Tab" | "Backspace" | "Delete" | "Home" | "End" | "PageUp" | "PageDown" | "F2";

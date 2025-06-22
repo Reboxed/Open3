@@ -39,14 +39,26 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     useEffect(() => {
         const updateTabs = async () => {
             const resolvedTabs = rawTabs instanceof Promise ? await rawTabs : rawTabs;
-            // Only set justAddedIdx if not initial mount
-            if (hasMounted.current && resolvedTabs && resolvedTabs.length > tabs.length) {
-                setJustAddedIdx(resolvedTabs.length - 1);
-            } else {
-                setJustAddedIdx(null);
+            // Compare tab IDs to avoid resetting state if only active tab changed
+            const prevTabIds = tabs.map(t => t.id).join(",");
+            const newTabIds = (resolvedTabs ?? []).map(t => t.id).join(",");
+            const prevActiveIdx = tabs.findIndex(t => t.active);
+            const newActiveIdx = (resolvedTabs ?? []).findIndex(t => t.active);
+            if (prevTabIds !== newTabIds) {
+                // Only set justAddedIdx if not initial mount
+                if (hasMounted.current && resolvedTabs && resolvedTabs.length > tabs.length) {
+                    setJustAddedIdx(resolvedTabs.length - 1);
+                } else {
+                    setJustAddedIdx(null);
+                }
+                setTabs(resolvedTabs ?? []);
+                setActiveTab(newActiveIdx);
+            } else if (prevActiveIdx !== newActiveIdx) {
+                // Only active tab changed, update activeTab
+                setTabs(resolvedTabs ?? []);
+                setActiveTab(newActiveIdx);
             }
-            setTabs(resolvedTabs ?? []);
-            setActiveTab(resolvedTabs?.findIndex(tab => tab.active));
+            // Otherwise, do not update state to avoid flicker
         };
 
         updateTabs();
@@ -56,17 +68,18 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
 
     const router = useRouter();
     const onTabChangeClick = useCallback(async (idx: number) => {
-        const tab = tabs[idx];
+        const prevTab = tabs[activeTab];
+        const newTab = tabs[idx];
         let eventCanceled = false;
         const event = {
             preventDefault() {
                 eventCanceled = true;
             },
         } as TabChangeEvent;
-        onTabChange?.(event, tabs[activeTab], tab);
-        setActiveTab(idx);
+        onTabChange?.(event, prevTab, newTab);
         if (eventCanceled) return;
-        if (tab?.link) router.push(tab.link);
+        if (newTab?.link) router.push(newTab.link); // Navigate immediately for snappier UX
+        setActiveTab(idx);
     }, [tabs, activeTab, onTabChange, router]);
 
     const onCloseTabClick = useCallback(async (idx: number) => {
@@ -80,7 +93,6 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
         } else nextTab = activeTab;
         setActiveTab(nextTab);
 
-        if (tabsCopy[nextTab]?.link) router.prefetch(tabsCopy[nextTab].link!);
         const res = onTabClose?.(tab, tabsCopy[nextTab]);
         if (res instanceof Promise) await res;
         if (tabsCopy[nextTab]?.link) router.replace(tabsCopy[nextTab].link!);
@@ -184,7 +196,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
     const [closeShortcut, setCloseShortcut] = useState("Alt+W");
     useEffect(() => {
         const isMac = navigator.userAgent.toLowerCase().includes("mac");
-        setCloseShortcut(isMac ? "⌥W" : "Alt+W");
+        setCloseShortcut(isMac ? "⌥ W" : "Alt+W");
     }, []);
 
     return (
@@ -197,7 +209,7 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                 {tabs.map((tab, idx) => (
                     <li
                         key={idx}
-                        onPointerOver={() => tab.link ? router.prefetch(tab.link) : null}
+                        onPointerEnter={() => tab.link ? router.prefetch(tab.link) : null}
                         onClick={() => onTabChangeClick(idx)}
                         className={`
                             flex h-full items-center
