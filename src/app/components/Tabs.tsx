@@ -42,6 +42,8 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
             // Compare tab IDs to avoid resetting state if only active tab changed
             const prevTabIds = tabs.map(t => t.id).join(",");
             const newTabIds = (resolvedTabs ?? []).map(t => t.id).join(",");
+            const prevActiveIdx = tabs.findIndex(t => t.active);
+            const newActiveIdx = (resolvedTabs ?? []).findIndex(t => t.active);
             if (prevTabIds !== newTabIds) {
                 // Only set justAddedIdx if not initial mount
                 if (hasMounted.current && resolvedTabs && resolvedTabs.length > tabs.length) {
@@ -50,7 +52,11 @@ export default function Tabs({ onTabChange, onTabCreate, onTabClose, tabs: rawTa
                     setJustAddedIdx(null);
                 }
                 setTabs(resolvedTabs ?? []);
-                setActiveTab(resolvedTabs?.findIndex(tab => tab.active));
+                setActiveTab(newActiveIdx);
+            } else if (prevActiveIdx !== newActiveIdx) {
+                // Only active tab changed, update activeTab
+                setTabs(resolvedTabs ?? []);
+                setActiveTab(newActiveIdx);
             }
             // Otherwise, do not update state to avoid flicker
         };

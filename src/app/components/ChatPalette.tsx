@@ -23,26 +23,27 @@ export const PINNED_SECTION = "📌 Pinned";
 const DELETE_ANIMATION_DURATION = 250; // ms
 const LONG_PRESS_DURATION = 500; // ms
 
-
 // Fetch chats
 // Helper to group chats by date section
 export function getSectionLabel(date: number) {
     if (isToday(date)) return "Today";
     if (isYesterday(date)) return "Yesterday";
     if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, "EEEE"); // Weekday name
-    return formatRelative(date, "MM/dd/yyyy"); // Fallback to date
+    return format(date, "MM/dd/yyyy"); // Fallback to date
 }
 
 // Extracted function to group and sort chats into sections
 function parseChatsWithSections(data: GetChatsResponse) {
     const chatsWithSections = new Map<string, ChatResponse[]>();
     data.chats.forEach(chat => {
-        const date = chat.createdAt ?? Date.now();
-        const section = !chat.pinned ? getSectionLabel(date) : PINNED_SECTION;
-        if (!chatsWithSections.has(section)) {
-            chatsWithSections.set(section, []);
-        }
-        chatsWithSections.get(section)?.push(chat);
+        try {
+            const date = chat.createdAt ?? Date.now();
+            const section = !chat.pinned ? getSectionLabel(date) : PINNED_SECTION;
+            if (!chatsWithSections.has(section)) {
+                chatsWithSections.set(section, []);
+            }
+            chatsWithSections.get(section)?.push(chat);
+        } catch { }
     });
 
     // Sort sections by pinned first, then by date
@@ -74,7 +75,10 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         const page = pageIndex + 1;
         return `/api/chat?page=${page}?limit=35`; // Adjust limit as needed
     }, async (url: string) => {
-        const res = await fetch(url);
+        const res = await fetch(url, {
+            cache: "no-cache",
+            next: { revalidate: 0 },
+        });
         if (!res.ok) {
             try {
                 const errorData = await res.json() as ApiError;
@@ -156,10 +160,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     }, [isTouchDevice]);
 
     const filteredChats = useMemo(() => {
-        if (!data || !data.chats) return data?.chats || new Map<string, ChatResponse[]>();
-        if (!searchQuery.trim()) return data.chats;
+        if (!data || !data.chats) return new Map<string, ChatResponse[]>();
+        if (!searchQuery.trim()) {
+            // If there are chats, return them directly
+            return data.chats;
+        }
         const query = searchQuery.toLowerCase();
         const filtered = new Map<string, ChatResponse[]>();
+        let hasAny = false;
         data.chats.forEach((chats, section) => {
             const filteredChats = chats.filter(chat => {
                 const titleMatch = chat.label?.toLowerCase().includes(query) || false;
@@ -169,9 +177,11 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             });
             if (filteredChats.length > 0) {
                 filtered.set(section, filteredChats);
+                hasAny = true;
             }
         });
-        return filtered;
+        // If search yields nothing, but there are chats, return empty map to trigger 'No chats found'
+        return hasAny ? filtered : new Map<string, ChatResponse[]>();
     }, [data, searchQuery]);
 
     useEffect(() => {
@@ -1132,9 +1142,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         >
                             Shift + Enter to start a new chat
                         </li>
-                        {filteredChats.entries().toArray().map((value, sectionIdx) => {
+                        {Array.from(filteredChats.entries()).map((value, sectionIdx) => {
                             let totalSectionsLength = 0;
-                            filteredChats.entries().toArray().forEach((entry, idx) => {
+                            Array.from(filteredChats.entries()).forEach((entry, idx) => {
                                 if (idx >= sectionIdx) return;
                                 totalSectionsLength += entry[1].length;
                             });

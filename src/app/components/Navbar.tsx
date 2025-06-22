@@ -118,6 +118,7 @@ export function Navbar() {
             }
             if (!activeFound && lsTabs.length > 0) router.replace("/");
         }
+        setTabs(lsTabs); // <-- Ensure state is updated so UI re-renders
         cleanTabs(lsTabs);
         // Only update localStorage if tabs changed
         setTabsS(localStorage, lsTabs);

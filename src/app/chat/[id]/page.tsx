@@ -326,7 +326,7 @@ export default function Chat() {
         }
     }, [onSend, tabId]);
 
-    const [showScrollToBottom, setShowScrollToBottom] = useState(true);
+    const [showScrollToBottom, setShowScrollToBottom] = useState(false);
     const previousScrollHeightRef = useRef(0);
     // Fix scroll behavior: only scroll when loading more at top or when at bottom
     useLayoutEffect(() => {
@@ -459,7 +459,6 @@ export default function Chat() {
                         {(() => {
                             const messages = pages.flatMap(p => p?.messages);
                             const lastMessage = messages?.[messages?.length - 1];
-                            console.log("Last message:", lastMessage?.role, generating, `${streamingMessageContent.trim()}`);
                             return (
                                 (generating || regeneratingIdx) && !streamingMessageContent.trim() && lastMessage?.role === "user" && (
                                     <div className="col-span-2 flex justify-start items-start py-8 group relative">
