@@ -25,7 +25,7 @@ export function useRecentChats(count: number = 4) {
           data.chats.map(async (chat: any) => {
             let firstResponse = "";
             try {
-              const msgRes = await fetch(`/api/chat/${chat.id}/messages`);
+              const msgRes = await fetch(`/api/chat/${chat.id}/messages?page=1&limit=2`);
               const msgData = await msgRes.json();
               if (msgData.messages && Array.isArray(msgData.messages)) {
                 const firstModelMsg = msgData.messages.find((m: any) => m.role === "model" && m.parts?.[0]?.text);

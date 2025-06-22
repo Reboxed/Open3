@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from "react";
 import ChatInput from "@/app/components/ChatInput";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,83 +11,65 @@ import { ChunkResponse, Message } from "@/app/lib/types/ai";
 import { escape } from "html-escaper";
 import rehypeClassAll from "@/app/lib/utils/rehypeClassAll";
 import { useParams } from "next/navigation";
-import { loadMessagesFromServer } from "@/app/lib/utils/messageUtils";
 import Image from "next/image";
 import { Protect, SignedOut } from "@clerk/nextjs";
 import { useModelProvider } from "./ModelProviderContext";
+import useSWRInfinite from "swr/infinite";
+import { ChatMessagesResponse } from "@/app/api/chat/[id]/messages/route";
+import { ApiError } from "@/internal-lib/types/api";
+
+// Scrolling not at the bottom = show scroll to bottom button
+function isAtBottom(threshold = 16): boolean {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const scrollHeight = document.documentElement.scrollHeight;
+    const clientHeight = document.documentElement.clientHeight;
+
+    return scrollTop + clientHeight >= scrollHeight - threshold;
+}
+
+const SCROLL_TOP_THRESHOLD = 196; // px, adjust as needed for prefetching before top
+const PAGE_SIZE = 15;
 
 export default function Chat() {
     const { model, provider } = useModelProvider();
     const params = useParams();
     const tabId = params.id?.toString() ?? "";
 
-    const [messages, setMessages] = useState<Message[]>([]);
-    const messagesRef = useRef<HTMLDivElement>(null);
+    const [messagesEl, setMessagesEl] = useState<HTMLDivElement | null>(null);
     const [generating, setGenerating] = useState(false);
-    const [messagesLoading, setMessagesLoading] = useState(true);
     const eventSourceRef = useRef<EventSource | null>(null);
-    const [autoScroll, setAutoScroll] = useState(true);
-    const programmaticScrollRef = useRef(false);
-    const topSentinelRef = useRef<HTMLDivElement>(null);
     const [streamError, setStreamError] = useState<string | null>(null);
     const [byokRequired, setByokRequired] = useState(false);
+    const [optimisticSentUserMessage, setOptimisticSentUserMessage] = useState<Message | null>(null);
+    const [streamingMessageContent, setStreamingMessageContent] = useState<string>("");
 
-    const fetchMessages = useCallback(async () => {
-        setMessagesLoading(true);
-        const serverMessages = await loadMessagesFromServer(tabId);
-        setMessagesLoading(false);
-        return serverMessages;
-    }, [tabId]);
-
-    useEffect(() => {
-        if (!tabId) return;
-        async function loadInitial() {
-            const serverMessages = await fetchMessages();
-            setMessages(prev => {
-                if (serverMessages.messages.length === prev.length) {
-                    return prev; // No new messages, return existing
-                }
-                return [prev, serverMessages.messages].flat();
-            });
-            // Instantly scroll to bottom after initial messages load
-            setTimeout(() => {
-                const messagesElement = messagesRef.current;
-                if (messagesElement) {
-                    programmaticScrollRef.current = true;
-                    window.scrollTo({
-                        top: messagesElement.scrollHeight,
-                        behavior: "auto"
-                    });
-                    setTimeout(() => {
-                        programmaticScrollRef.current = false;
-                    }, 100);
-                }
-            }, 0);
+    // TODO: Make use of `error`
+    const { data: pages = [], error, size, setSize, isValidating, isLoading, mutate } = useSWRInfinite(
+        (pageIndex, previousPage) => {
+            if (previousPage && previousPage.length < PAGE_SIZE) return null;
+            return `/api/chat/${tabId}/messages?page=${pageIndex + 1}&limit=${PAGE_SIZE}&reverse=true`;
+        },
+        (url) =>
+            fetch(url)
+                .then(res => res.json() as Promise<ChatMessagesResponse | ApiError>)
+                .then(json => {
+                    if ("error" in json) throw Error(json.error);
+                    return json;
+                }),
+        {
+            revalidateOnFocus: false,
+            revalidateOnReconnect: true,
+            keepPreviousData: true,
         }
-        loadInitial();
-    }, [tabId, fetchMessages]);
-
-    useEffect(() => {
-        if (!messagesLoading && messages.length > 0 && autoScroll) {
-            const messagesElement = messagesRef.current;
-            if (messagesElement) {
-                programmaticScrollRef.current = true;
-                window.scrollTo({
-                    behavior: "smooth",
-                    top: messagesElement.scrollHeight,
-                });
-                setTimeout(() => {
-                    programmaticScrollRef.current = false;
-                }, 100);
-            }
-        }
-    }, [messages, messagesLoading, autoScroll]);
+    );
 
     const localGenerating = useRef(generating);
     const onSend = useCallback(async (message: string, attachments: { url: string; filename: string }[] = [], search: boolean, model: string, provider: string) => {
         // Add user message optimistically to UI
         const userMessage: Message = { role: "user", parts: [{ text: message }], attachments: attachments.length > 0 ? attachments : undefined };
-        setMessages(prev => [...prev, userMessage]);
+        setOptimisticSentUserMessage(userMessage);
+        setStreamingMessageContent("");
+        setStreamError(null);
         localGenerating.current = true;
         setGenerating(true);
 
@@ -105,6 +87,8 @@ export default function Chat() {
             setGenerating(false);
             localGenerating.current = false;
             setStreamError("Failed to send message");
+            setOptimisticSentUserMessage(null);
+            setStreamingMessageContent("");
             return;
         });
 
@@ -112,56 +96,108 @@ export default function Chat() {
             setGenerating(false);
             localGenerating.current = false;
             setStreamError("Failed to send message");
+            setOptimisticSentUserMessage(null);
+            setStreamingMessageContent("");
             return;
         }
     }, [tabId]);
 
     // Regenerate handler for LLM responses
-    const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
-    const handleRegenerate = useCallback(async (idx: number) => {
-        setRegeneratingIdx(idx);
-        const deleteRes = await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" })
-            .catch(() => {
+    const [regeneratingIdx, setRegeneratingIdx] = useState<{ pageIdx: number; messageIdx: number } | null>(null);
+    const handleRegenerate = useCallback(
+        async (pageIdx: number, msgIdx: number) => {
+            setGenerating(true);
+            // Find total messages from the first page (should be present in paginated response)
+            const total = pages[0]?.total;
+            if (typeof total !== "number") {
+                setStreamError("Total message count not available");
+                setGenerating(false);
+                return;
+            }
+
+            // Calculate the server index (oldest=0, newest=total-1)
+            const serverIndex = total - (pageIdx * PAGE_SIZE + msgIdx) - 1;
+
+            // Find the previous user message (should be at serverIndex-1)
+            const allMessages = pages.flatMap(page => page.messages);
+            const prevUserMsg = allMessages[serverIndex - 1] as Message | undefined;
+            if (!prevUserMsg || (prevUserMsg?.role) !== "user") {
+                console.warn("No previous user message found for regeneration");
+                setRegeneratingIdx(null);
+                setGenerating(false);
+                return;
+            }
+
+            console.log("Regenerating message at server index:", serverIndex);
+            setStreamingMessageContent("");
+            setRegeneratingIdx({ pageIdx, messageIdx: msgIdx });
+            setStreamError(null);
+            const deleteRes = await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${serverIndex}`, { method: "DELETE" })
+                .catch(() => {
+                    setRegeneratingIdx(null);
+                    setStreamError("Failed to delete message for regeneration");
+                    setGenerating(false);
+                    return;
+                });
+            if (!deleteRes || !deleteRes.ok) {
                 setRegeneratingIdx(null);
                 setStreamError("Failed to delete message for regeneration");
+                setGenerating(false);
+                return;
+            }
+
+            const response = await fetch(`/api/chat/${tabId}/regenerate?fromIndex=${serverIndex}`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            }).catch(() => {
+                setRegeneratingIdx(null);
+                setStreamError("Failed to regenerate message");
+                setGenerating(false);
                 return;
             });
-        if (!deleteRes || !deleteRes.ok) {
-            setRegeneratingIdx(null);
-            setStreamError("Failed to delete message for regeneration");
-            return;
-        }
 
-        const prevUserMsg = messages[idx - 1];
-        if (!prevUserMsg || (prevUserMsg?.role) !== "user") {
-            setRegeneratingIdx(null);
-            return;
-        }
+            if (!response || !response.ok) {
+                setRegeneratingIdx(null);
+                setStreamError("Failed to regenerate message");
+                setGenerating(false);
+                return;
+            }
 
-        const response = await fetch(`/api/chat/${tabId}/regenerate?fromIndex=${idx}`, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        }).catch(() => {
-            setRegeneratingIdx(null);
-            setStreamError("Failed to regenerate message");
-            return;
-        });
+            // Now delete the messages after sending the request on the view
+            // Remove all messages after the to-be-regenerated AI message (but keep the user message) using mutate
+            setGenerating(false);
+            mutate(pages => {
+                if (!pages) return pages;
+                // Clone pages to avoid mutation
+                const newPages = pages.map(page => ({
+                    ...page,
+                    messages: [...page.messages],
+                }));
 
-        if (!response || !response.ok) {
-            setRegeneratingIdx(null);
-            setStreamError("Failed to regenerate message");
-            return;
-        }
+                // Remove the message at the given pageIdx and msgIdx,
+                // and remove all messages/pages after it
+                if (
+                    newPages[pageIdx] &&
+                    newPages[pageIdx].messages &&
+                    newPages[pageIdx].messages[msgIdx]
+                ) {
+                    // Remove messages after msgIdx in the same page
+                    newPages[pageIdx].messages = newPages[pageIdx].messages.slice(0, msgIdx);
+                    // Remove all pages after pageIdx
+                    newPages.length = pageIdx + 1;
+                    // Optionally update total if present
+                    if (typeof newPages[0].total === "number") {
+                        // Recalculate total as sum of all messages
+                        newPages[0].total = newPages.reduce((acc, page) => acc + page.messages.length, 0);
+                    }
+                }
 
-        // Now delete the messages after sending the request on the view
-        setMessages(prev => {
-            const newMessages = [...prev];
-            newMessages.splice(idx, 1); // Remove the model message at idx
-            return newMessages;
-        });
-    }, [messages, tabId]);
+                // Remove empty pages except the first one (to avoid empty UI)
+                return newPages.filter((page, idx) => idx === 0 || page.messages.length > 0);
+            });
+        }, [pages, tabId]);
 
     useEffect(() => {
         if (eventSourceRef.current) {
@@ -171,11 +207,13 @@ export default function Chat() {
         const eventSource = new EventSource(`/api/stream?` + new URLSearchParams({ chat: tabId }).toString());
         eventSourceRef.current = eventSource;
 
-        const streamDoneEvent = (event: MessageEvent) => {
+        const streamDoneEvent = async (event: MessageEvent) => {
             assistantMessage = "";
-            reloadMessagesFromServerIfStateInvalid();
+            await mutate().catch(() => { });
             setGenerating(false);
             setRegeneratingIdx(null);
+            setOptimisticSentUserMessage(null);
+            setStreamingMessageContent("");
         }
         eventSource.addEventListener("stream-done", streamDoneEvent);
 
@@ -183,17 +221,22 @@ export default function Chat() {
             assistantMessage = "";
             setStreamError(event.data || "An error occurred");
             setGenerating(false);
+            setStreamingMessageContent("");
         }
         eventSource.addEventListener("stream-error", streamErrorEvent);
 
         let assistantMessage = "";
         eventSource.onmessage = async (event) => {
+            setStreamError(null);
             if (!localGenerating.current) {
                 // That means this client didn't start the generation, therefore reload the state first
-                await reloadMessagesFromServerIfStateInvalid().catch(() => {
+                // Use mutate to reload messages from the server if state is invalid
+                await mutate().catch(() => {
                     setStreamError("Failed to reload messages from server");
                     setGenerating(false);
                     localGenerating.current = false;
+                    setOptimisticSentUserMessage(null);
+                    setStreamingMessageContent("");
                     return;
                 });
             }
@@ -210,20 +253,12 @@ export default function Chat() {
                 if (!parsed.content) return; // Skip empty chunks
 
                 assistantMessage += parsed.content;
-                setMessages(prev => {
-                    const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage?.role === "model") {
-                        lastMessage.parts = [{ text: assistantMessage, annotations: parsed.urlCitations || [] }];
-                        return [...newMessages];
-                    } else {
-                        return [...newMessages, { role: "model", parts: [{ text: assistantMessage }] } as Message];
-                    }
-                });
+                setStreamingMessageContent(assistantMessage);
             } catch (e) {
                 console.error("Failed to parse chunk text:", e);
                 setStreamError("Failed to parse response chunk");
                 setGenerating(false);
+                setStreamingMessageContent("");
                 eventSource.close();
             }
         }
@@ -239,13 +274,18 @@ export default function Chat() {
             eventSource.close();
             assistantMessage = "";
             setGenerating(false);
+            setOptimisticSentUserMessage(null);
+            setStreamingMessageContent("");
         }, { once: true });
 
-        eventSource.addEventListener("done", () => {
-            reloadMessagesFromServerIfStateInvalid();
+        eventSource.addEventListener("done", async () => {
+            // Use mutate to reload messages from the server if state is invalid
             eventSource.close();
             assistantMessage = "";
             setGenerating(false);
+            setOptimisticSentUserMessage(null);
+            setStreamingMessageContent("");
+            await mutate().catch(() => { });
         }, { once: true });
 
         return () => {
@@ -256,10 +296,10 @@ export default function Chat() {
                 eventSourceRef.current = null;
             }
         }
-    }, [tabId, streamError]);
+    }, [tabId, streamError, mutate]);
 
-    // Memorize initial search state from sessionStorage (lines 262-283 logic)
-    const [initialSearch, setInitialSearch] = useState<boolean | undefined>(undefined);
+    // Memorize previous web search state from sessionStorage (lines 262-283 logic)
+    const [webSearchInitiallyOn, setWebSearchInitiallyOn] = useState<boolean | undefined>(undefined);
     useEffect(() => {
         const tempNewMsg = sessionStorage.getItem("temp-new-tab-msg");
         if (tempNewMsg) {
@@ -276,7 +316,7 @@ export default function Chat() {
                         };
                         checkEventSource();
                     });
-                    setInitialSearch(!!parsedMsg.search);
+                    setWebSearchInitiallyOn(!!parsedMsg.search);
                     sessionStorage.removeItem("temp-new-tab-msg");
                     waitUntilEventSource.then(() => {
                         onSend(parsedMsg.message, parsedMsg.attachments || [], parsedMsg.search || false, "", "");
@@ -284,135 +324,120 @@ export default function Chat() {
                 }
             } catch { }
         }
-
-        let lastScrollY = window.scrollY;
-        function handleScroll() {
-            if (programmaticScrollRef.current) {
-                lastScrollY = window.scrollY;
-                return;
-            }
-            const messagesElement = messagesRef.current;
-            if (!messagesElement) return;
-            const currentScrollY = window.scrollY;
-            const scrollPosition = currentScrollY + window.innerHeight;
-            const bottomThreshold = messagesElement.scrollHeight - 35;
-
-            if (currentScrollY < lastScrollY) {
-                setAutoScroll(false);
-            } else if (currentScrollY > lastScrollY) {
-                if (scrollPosition >= bottomThreshold) {
-                    const messagesElement = messagesRef.current;
-                    if (messagesElement) {
-                        programmaticScrollRef.current = true;
-                        window.scrollTo({
-                            behavior: "instant",
-                            top: messagesElement.scrollHeight,
-                        });
-                        setTimeout(() => {
-                            programmaticScrollRef.current = false;
-                        }, 100);
-                    }
-                    setAutoScroll(true);
-                }
-            }
-            lastScrollY = currentScrollY;
-        }
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
     }, [onSend, tabId]);
 
-    const reloadMessagesFromServerIfStateInvalid = useCallback(async () => {
-        const serverMessages = await loadMessagesFromServer(tabId);
-        if (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") {
-            setMessages(serverMessages.messages);
+    const [showScrollToBottom, setShowScrollToBottom] = useState(true);
+    const previousScrollHeightRef = useRef(0);
+    // Fix scroll behavior: only scroll when loading more at top or when at bottom
+    useLayoutEffect(() => {
+        const previousScrollHeight = previousScrollHeightRef.current;
+        const newScrollHeight = document.body.scrollHeight;
+        // If loading more messages at the top (pagination)
+        if (window.scrollY <= SCROLL_TOP_THRESHOLD && newScrollHeight > previousScrollHeight) {
+            // Preserve scroll position when loading more
+            const scrollDelta = newScrollHeight - previousScrollHeight;
+            window.scrollTo({
+                top: scrollDelta,
+                behavior: "auto",
+            });
         }
-    }, [tabId, messages]);
+        previousScrollHeightRef.current = newScrollHeight;
+    }, [pages]);
 
     useEffect(() => {
-        if (autoScroll) {
-            setTimeout(() => {
-                const event = new Event("scroll");
-                window.dispatchEvent(event);
-            }, 0);
+        const onScroll = () => {
+            setShowScrollToBottom(!isAtBottom());
+
+            // Make sure the scroll position is retained when loading more
+            if (window.scrollY <= SCROLL_TOP_THRESHOLD && !isValidating && pages[pages.length - 1]?.hasMore) {
+                previousScrollHeightRef.current = document.body.scrollHeight;
+                setSize(size + 1); // triggers useLayoutEffect on `pages` change
+            }
+        };
+
+        window.addEventListener("scroll", onScroll);
+        return () => window.removeEventListener("scroll", onScroll);
+    }, [size, setSize, isValidating, pages, tabId]);
+
+    const initiallyLoadedRef = useRef(false);
+    useEffect(() => {
+        if (initiallyLoadedRef.current) return;
+
+        // Scroll to bottom only once after messages load
+        if (!isLoading && pages.length > 0 && messagesEl) {
+            initiallyLoadedRef.current = true;
+            window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" });
         }
-    }, [autoScroll]);
+    }, [isLoading, pages, tabId, messagesEl]);
 
-    function handleStopAutoScroll() {
-        setAutoScroll(false);
-    }
+    // useLayoutEffect(() => {
+    //     console.log(pages)
+    // }, [pages]);
 
-    async function handleDeleteMessage(idx: number) {
-        if (idx === 0) {
+    // Update handleDeleteMessage to accept pageIdx and msgIdx, and use the same server index calculation as regeneration
+    async function handleDeleteMessage(pageIdx: number, msgIdx: number) {
+        const total = pages[0]?.total;
+        if (typeof total !== "number") {
+            setStreamError("Total message count not available");
+            return;
+        }
+        const serverIndex = total - (pageIdx * PAGE_SIZE + msgIdx) - 1;
+        if (serverIndex === 0) {
             // Delete the entire chat if the first message is deleted
             await fetch(`/api/chat/${tabId}`, { method: "DELETE" });
             // Redirect to home or another page after deletion
             window.location.href = "/";
             return;
         }
-        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${idx}`, { method: "DELETE" });
-        setMessages(messages.slice(0, idx));
+        await fetch(`/api/chat/${tabId}/messages/delete-from-index?fromIndex=${serverIndex}`, { method: "DELETE" });
+        mutate(pages => {
+            if (!pages) return pages;
+            // Clone pages to avoid mutation
+            const newPages = pages.map(page => ({
+                ...page,
+                messages: [...page.messages],
+            }));
+
+            // Remove the message at the given pageIdx and msgIdx,
+            // and remove all messages/pages after it
+            if (
+                newPages[pageIdx] &&
+                newPages[pageIdx].messages &&
+                newPages[pageIdx].messages[msgIdx]
+            ) {
+                // Remove messages after msgIdx in the same page
+                newPages[pageIdx].messages = newPages[pageIdx].messages.slice(0, msgIdx);
+                // Remove all pages after pageIdx
+                newPages.length = pageIdx + 1;
+                // Optionally update total if present
+                if (typeof newPages[0].total === "number") {
+                    // Recalculate total as sum of all messages
+                    newPages[0].total = newPages.reduce((acc, page) => acc + page.messages.length, 0);
+                }
+            }
+
+            // Remove empty pages except the first one (to avoid empty UI)
+            return newPages.filter((page, idx) => idx === 0 || page.messages.length > 0);
+        });
     }
 
     useEffect(() => {
-        fetch("/api/byok/required").then(res => res.json()).then(data => {
-            setByokRequired(data.required);
-            if (data.required) {
-                window.location.href = "/settings";
-            }
-        });
+        fetch("/api/byok/required")
+            .then(res => res.json())
+            .then((data) => {
+                setByokRequired(data.required);
+                if (data.required) {
+                    window.location.href = "/settings";
+                }
+            });
     }, []);
-
-    // Fetch chat info (model/provider) on mount
-    // useEffect(() => {
-    //     if (!tabId) return;
-    //     fetch(`/api/chat/${tabId}`)
-    //         .then(res => res.json())
-    //         .then data => {
-    //             if (data && data.model && data.provider) {
-    //                 setModel(data.model);
-    //                 setProvider(data.provider);
-    //             }
-    //         })
-    //         .catch(() => {
-    //             setModel(null);
-    //             setProvider(null);
-    //         });
-    // }, [tabId]);
-
     if (byokRequired) return null;
 
     return (
         <>
             <Protect>
-                {generating && autoScroll && (
-                    <button
-                        onClick={handleStopAutoScroll}
-                        className="z-50 top-18 backdrop-blur-2xl fixed left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-red-500/30 cursor-pointer text-white rounded-full p-3 py-1.5 shadow-lg transition-all flex items-center justify-center"
-                        aria-label="Stop automatic scroll"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 mr-2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        Stop automatic scroll
-                    </button>
-                )}
                 <div className="min-h-0 flex-1 w-full flex flex-col justify-between items-center py-6 gap-8">
-                    <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip grid gap-2 grid-cols-[0.1fr_0.9fr]" ref={messagesRef}>
-                        <div ref={topSentinelRef} style={{ height: 1 }} />
-                        {!messagesLoading && (
-                            <>
-                                {messages.map((message, idx) => (
-                                    <MessageBubble
-                                        key={`${message?.role}-${idx}`}
-                                        message={message}
-                                        index={idx}
-                                        onDelete={handleDeleteMessage}
-                                        onRegenerate={handleRegenerate}
-                                        regeneratingIdx={regeneratingIdx}
-                                    />
-                                ))}
-                            </>
-                        )}
+                    <div className="w-[80%] max-md:w-[90%] max-w-[1000px] max-h-full overflow-x-clip flex flex-col-reverse gap-2" ref={setMessagesEl}>
                         {streamError && (
                             <div className="col-span-2 w-full flex flex-col items-start gap-1 mt-4">
                                 <span className="text-red-500">Message generation failed. You can retry.</span>
@@ -421,43 +446,101 @@ export default function Chat() {
                                     className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition cursor-pointer mt-2"
                                     onClick={() => {
                                         setStreamError(null);
-                                        if (messages.length > 1) handleRegenerate(messages.length - 1);
+                                        // Find last message's pageIdx and messageIdx
+                                        const lastPageIdx = pages.length - 1;
+                                        const lastMsgIdx = pages[lastPageIdx]?.messages.length - 1;
+                                        if (lastPageIdx >= 0 && lastMsgIdx >= 0) handleRegenerate(lastPageIdx, lastMsgIdx);
                                     }}
                                 >
                                     Retry
                                 </button>
                             </div>
                         )}
-                        {generating && (!messages[messages.length - 1] || messages[messages.length - 1]?.role !== "model") && (
-                            <div className="col-span-2 flex justify-start items-start py-8 group relative">
-                                <span className="flex gap-1">
-                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
-                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-                                    <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
-                                </span>
-                                <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 bg-neutral-800 text-white text-xs rounded px-3 py-2 shadow-lg z-10 w-max max-w-xs">
-                                    Why is this showing? Latency, reasoning and uploading files
-                                </div>
-                                <style jsx>{`
-                                @keyframes bounce {
-                                    0%, 80%, 100% { transform: translateY(0); }
-                                    40% { transform: translateY(-8px); }
-                                }
-                                .animate-bounce {
-                                    animation: bounce 1s infinite;
-                                }
-                            `}</style>
-                            </div>
+                        {(() => {
+                            const messages = pages.flatMap(p => p?.messages);
+                            const lastMessage = messages?.[messages?.length - 1];
+                            console.log("Last message:", lastMessage?.role, generating, `${streamingMessageContent.trim()}`);
+                            return (
+                                (generating || regeneratingIdx) && !streamingMessageContent.trim() && lastMessage?.role === "user" && (
+                                    <div className="col-span-2 flex justify-start items-start py-8 group relative">
+                                        <span className="flex gap-1">
+                                            <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+                                            <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                                            <span className="inline-block w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                                        </span>
+                                        <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 bg-neutral-800 delay-200 text-white text-xs rounded px-3 py-2 shadow-lg z-10 w-max max-w-xs">
+                                            Why is this showing? Latency, reasoning and uploading files
+                                        </div>
+                                        <style jsx>{`
+                                            @keyframes bounce {
+                                                0%, 80%, 100% { transform: translateY(0); }
+                                                40% { transform: translateY(-8px); }
+                                            }
+                                            .animate-bounce {
+                                                animation: bounce 1s infinite;
+                                            }
+                                        `}</style>
+                                    </div>
+                                )
+                            )
+                        })()}
+                        {!isLoading && (
+                            <>
+                                {/* Streaming model message */}
+                                {streamingMessageContent && (
+                                    <MessageBubble
+                                        key="streaming-model"
+                                        message={{ role: "model", parts: [{ text: streamingMessageContent }] }}
+                                        index={-2}
+                                        pageIdx={-1}
+                                        msgIdx={-1}
+                                    />
+                                )}
+                                {/* Optimistic user message */}
+                                {optimisticSentUserMessage && (
+                                    <MessageBubble
+                                        key="optimistic-user"
+                                        message={optimisticSentUserMessage}
+                                        index={-1}
+                                        pageIdx={-1}
+                                        msgIdx={-1}
+                                    />
+                                )}
+                                {/* Render all messages from SWR */}
+                                {pages.flatMap((messages, pageIdx) =>
+                                    messages.messages.map((message, msgIdx) => (
+                                        <MessageBubble
+                                            key={`${message?.role}-${pageIdx}-${msgIdx}`}
+                                            message={message}
+                                            index={PAGE_SIZE * pageIdx + msgIdx}
+                                            pageIdx={pageIdx}
+                                            msgIdx={msgIdx}
+                                            onDelete={handleDeleteMessage}
+                                            onRegenerate={handleRegenerate}
+                                            regeneratingIdx={regeneratingIdx}
+                                        />
+                                    ))
+                                )}
+                            </>
                         )}
                     </div>
+                    {showScrollToBottom && (
+                        <button
+                            onClick={() => window.scrollBy({ top: document.body.scrollHeight, behavior: "instant" })}
+                            className="z-50 top-18 backdrop-blur-2xl fixed left-1/2 -translate-x-1/2 w-fit bg-white/10 hover:bg-white/15 cursor-pointer text-neutral-50/80 rounded-full px-5 py-2 shadow-lg transition-all flex items-center justify-center"
+                            aria-label="Stop automatic scroll"
+                        >
+                            Scroll to bottom
+                        </button>
+                    )}
                     {model && provider && (
                         <ChatInput
                             onSend={onSend}
                             generating={generating}
-                            className="w-[80%] max-md:w-[90%] max-w-[1000px] z-15"
+                            className="w-[80%] max-md:w-[90%] max-w-[1000px] z-5"
                             model={model}
                             provider={provider}
-                            initialSearch={initialSearch}
+                            initialSearch={webSearchInitiallyOn}
                             alignment="bottom"
                         />
                     )}
@@ -575,7 +658,7 @@ const PreWithCopy = ({ node, className, children, ...props }: any) => {
     );
 };
 
-const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, onDelete?: (idx: number) => void, onRegenerate?: (idx: number) => void, regeneratingIdx?: number | null }) => {
+const MessageBubble = ({ message, index, pageIdx, msgIdx, onDelete, onRegenerate, regeneratingIdx }: { message: Message, index: number, pageIdx: number, msgIdx: number, onDelete?: (pageIdx: number, msgIdx: number) => void, onRegenerate?: (pageIdx: number, msgIdx: number) => void, regeneratingIdx?: { pageIdx: number; messageIdx: number } | null }) => {
     const isUser = message?.role === "user";
     const className = isUser
         ? "px-6 py-4 rounded-2xl mb-1 bg-white/[0.06] justify-self-end break-words max-w-full overflow-x-auto"
@@ -672,11 +755,11 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
 
     return (
         <div
-            className={`${isUser ? "justify-self-end col-start-2 " : "justify-self-start col-span-2"} max-w-full relative`}
+            className={`max-w-full ${isUser ? "justify-self-end" : "justify-self-start"} relative`}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
-            <div className={`${className} max-w-full min-w-0`} style={{ wordBreak: 'break-word', overflowX: 'auto' }}>
+            <div className={`${className} ${isUser ? "max-w-9/10" : "max-w-full"} min-w-0`} style={{ wordBreak: 'break-word', overflowX: 'auto' }}>
                 {renderedMarkdown}
                 {/* Annotations rendering */}
                 {message.parts && message.parts[0]?.annotations && message.parts[0].annotations.length > 0 && (
@@ -707,7 +790,7 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                 <button
                     aria-label={copied ? "Copied!" : "Copy message"}
                     onClick={handleCopy}
-                    className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${copied ? "text-neutral-50" : ""}`}
+                    className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center ${copied ? "text-neutral-50" : ""}`}
                     style={{ opacity: hovered || copied ? 1 : 0, pointerEvents: hovered || copied ? "auto" : "none", width: 36, height: 36 }}
                 >
                     <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: copied ? "scale(0)" : "scale(1)", zIndex: copied ? 0 : 1 }}>
@@ -727,17 +810,15 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                 {message?.role === "model" && onRegenerate && (
                     <button
                         aria-label="Regenerate response"
-                        onClick={() => onRegenerate(index)}
-                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${regeneratingIdx === index ? "animate-spin" : ""}`}
-                        style={{ opacity: hovered || regeneratingIdx === index ? 1 : 0, pointerEvents: hovered || regeneratingIdx === index ? "auto" : "none", width: 36, height: 36 }}
-                        disabled={regeneratingIdx === index}
+                        onClick={() => onRegenerate(pageIdx, msgIdx)}
+                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center ${(regeneratingIdx && regeneratingIdx.pageIdx === pageIdx && regeneratingIdx.messageIdx === msgIdx) ? "animate-spin" : ""}`}
+                        style={{ opacity: hovered || (regeneratingIdx && regeneratingIdx.pageIdx === pageIdx && regeneratingIdx.messageIdx === msgIdx) ? 1 : 0, pointerEvents: hovered || (regeneratingIdx && regeneratingIdx.pageIdx === pageIdx && regeneratingIdx.messageIdx === msgIdx) ? "auto" : "none", width: 36, height: 36 }}
+                        disabled={!!(regeneratingIdx && regeneratingIdx.pageIdx === pageIdx && regeneratingIdx.messageIdx === msgIdx)}
                     >
-                        <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: "scale(1)", zIndex: 1 }}>
-                            {/* Regenerate SVG */}
-                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M15.1425 1.97778L15.0644 7.62329L9.41692 7.677L9.40032 5.927L12.7685 5.89575C11.101 4.3035 8.48511 4.07555 6.55071 5.47583C4.37106 7.05408 3.88366 10.1008 5.46184 12.2805C7.04012 14.4599 10.086 14.9473 12.2656 13.3694C12.8709 12.931 13.3441 12.3809 13.6796 11.7688L15.2148 12.6096C14.7572 13.4445 14.1118 14.1926 13.2919 14.7864C10.3295 16.9314 6.18904 16.2691 4.04387 13.3069C1.89907 10.3444 2.56195 6.20387 5.52434 4.05884C7.92652 2.31966 11.1029 2.42655 13.3622 4.10864L13.3925 1.95435L15.1425 1.97778Z" fill="currentColor" />
-                            </svg>
-                        </span>
+                        {/* Regenerate SVG */}
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15.1425 1.97778L15.0644 7.62329L9.41692 7.677L9.40032 5.927L12.7685 5.89575C11.101 4.3035 8.48511 4.07555 6.55071 5.47583C4.37106 7.05408 3.88366 10.1008 5.46184 12.2805C7.04012 14.4599 10.086 14.9473 12.2656 13.3694C12.8709 12.931 13.3441 12.3809 13.6796 11.7688L15.2148 12.6096C14.7572 13.4445 14.1118 14.1926 13.2919 14.7864C10.3295 16.9314 6.18904 16.2691 4.04387 13.3069C1.89907 10.3444 2.56195 6.20387 5.52434 4.05884C7.92652 2.31966 11.1029 2.42655 13.3622 4.10864L13.3925 1.95435L15.1425 1.97778Z" fill="currentColor" />
+                        </svg>
                     </button>
                 )}
                 {/* Delete button for user messages only */}
@@ -749,10 +830,10 @@ const MessageBubble = ({ message, index, onDelete, onRegenerate, regeneratingIdx
                                 setPendingDelete(true);
                             } else {
                                 setPendingDelete(false);
-                                onDelete(index);
+                                onDelete(pageIdx, msgIdx);
                             }
                         }}
-                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center z-10 ${pendingDelete ? "!text-red-500" : ""}`}
+                        className={`relative transition-all duration-300 hover:text-neutral-50/75 text-neutral-50/50 rounded-full flex items-center justify-center ${pendingDelete ? "!text-red-500" : ""}`}
                         style={{ opacity: hovered || pendingDelete ? 1 : 0, pointerEvents: hovered || pendingDelete ? "auto" : "none", width: 36, height: 36 }}
                     >
                         <span className="absolute inset-0 flex items-center justify-center transition-transform duration-200" style={{ transform: pendingDelete ? "scale(0)" : "scale(1)", zIndex: pendingDelete ? 0 : 1 }}>

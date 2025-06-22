@@ -152,7 +152,7 @@ export function Navbar() {
     // Add settings button for BYOK
     return (
         <>
-            <nav className="h-fit flex gap-2 pt-3 px-2 justify-center sticky bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
+            <nav className="h-[60px] flex gap-2 pt-3 px-2 justify-center fixed bg-[#212121]/75 backdrop-blur-lg top-0 z-20 w-full">
                 <div className="relative shrink-0 flex gap-2 w-full justify-center">
                     <Tabs
                         tabs={[
@@ -162,14 +162,6 @@ export function Navbar() {
                                 label: getTabTitle(t),
                             }))
                         ]}
-                        onTabChange={() => {
-                            const lsTabs = loadTabsLocally(localStorage);
-                            for (let i = 0; i < lsTabs.length; i++) {
-                                lsTabs[i].active = lsTabs[i].link == pathname;
-                                if (lsTabs[i].active) break;
-                            }
-                            setTabs(lsTabs);
-                        }}
                         onTabCreate={() => setShowPalette(true)}
                         onTabClose={tab => {
                             let lsTabs = loadTabsLocally(localStorage);

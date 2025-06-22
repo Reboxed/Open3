@@ -1,31 +1,54 @@
-import React from "react";
-import { cookies } from "next/headers";
+"use client";
+import React, { use, useEffect, useState } from "react";
 import ModelProviderClientWrapper from "./ModelProviderClientWrapper";
 
-// Helper to fetch model/provider on the server
-async function fetchModelProvider(chatId: string) {
-  // You may need to pass cookies/headers for auth if required
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/chat/${chatId}`,
-    { headers: { Cookie: (await cookies()).toString() } }
-  );
-  if (!res.ok) return { model: null, provider: null };
-  const data = await res.json();
-  return {
-    model: data.model || null,
-    provider: data.provider || null,
+// Default values
+const DEFAULT_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_PROVIDER = "openrouter";
+
+export default function ChatLayout({ children, params }: {
+  children: React.ReactNode,
+  params: Promise<{ id: string }>,
+}) {
+  // Try to get previous values from localStorage (client only)
+  const getInitialModel = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lastModel") || DEFAULT_MODEL;
+    }
+    return DEFAULT_MODEL;
   };
-}
+  const getInitialProvider = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lastProvider") || DEFAULT_PROVIDER;
+    }
+    return DEFAULT_PROVIDER;
+  };
 
-export default async function ChatLayout({ children, params }: { children: React.ReactNode, params: Promise<{ id: string }> }) {
-  const { model, provider } = await fetchModelProvider((await params).id);
+  const { id } = use(params);
 
-  if (!model || !provider) {
-    return (
-      <div className="w-full h-full flex items-center justify-center min-h-[200px]">
-        <span className="text-neutral-400 animate-pulse text-lg">Loading chat...</span>
-      </div>
-    );
-  }
+  const [model, setModel] = useState(getInitialModel);
+  const [provider, setProvider] = useState(getInitialProvider);
+
+  useEffect(() => {
+    async function fetchModelProvider(chatId: string) {
+      try {
+        const res = await fetch(`/api/chat/${chatId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.model) {
+          setModel(data.model);
+          localStorage.setItem("lastModel", data.model);
+        }
+        if (data.provider) {
+          setProvider(data.provider);
+          localStorage.setItem("lastProvider", data.provider);
+        }
+      } catch (e) {
+        // Ignore errors, keep optimistic state
+      }
+    }
+    fetchModelProvider(id);
+  }, [id]);
 
   return (
     <ModelProviderClientWrapper model={model} provider={provider}>
