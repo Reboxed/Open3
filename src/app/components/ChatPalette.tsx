@@ -1,7 +1,7 @@
 import "./ChatPalette/style.css";
-import React, { useCallback } from "react";
-import useSWR from "swr";
-import { ApiError, ChatResponse, GetChatsResponse } from "../../internal-lib/types/api";
+import React, { startTransition, useCallback } from "react";
+import useSWRInfinite from "swr/infinite";
+import { ApiError, ChatResponse, CreateChatRequest, CreateChatResponse, GetChatsResponse } from "../../internal-lib/types/api";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { addAndSaveTabsLocally } from "../lib/utils/localStorageTabs";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { format, isToday, isYesterday, isThisWeek, formatRelative } from "date-f
 import isNestedButton from "../lib/utils/isNestedButton";
 import ChatItem from "./ChatPalette/ChatItem";
 import { Key } from "../lib/types/keyboardInput";
+import { useInView } from 'react-intersection-observer';
 
 interface ChatPaletteProps {
     className?: string;
@@ -65,7 +66,14 @@ function parseChatsWithSections(data: GetChatsResponse) {
 }
 
 export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss }: ChatPaletteProps) {
-    const { data, isLoading, isValidating: isLoadingMore, mutate } = useSWR("/api/chat?page=1", async (url: string) => {
+    const { ref, inView } = useInView();
+
+    const [loadingMore, setLoadingMore] = useState(false);
+    const { data: paginatedData, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite((pageIndex: number, previousPageData) => {
+        if (previousPageData && !previousPageData.hasMore) return null; // No more pages to load
+        const page = pageIndex + 1;
+        return `/api/chat?page=${page}&limit=10`; // Adjust limit as needed
+    }, async (url: string) => {
         const res = await fetch(url, {
             cache: "no-cache",
             next: { revalidate: 0 },
@@ -82,7 +90,41 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         // Parse response data
         const data = await res.json() as GetChatsResponse;
         return parseChatsWithSections(data);
+    }, {
+        revalidateOnMount: true,
+        revalidateOnReconnect: true,
     });
+
+    const data = useMemo(() => {
+        if (!paginatedData) return undefined;
+        // Merge all pages' chats into a single Map with sections
+        const mergedChats = new Map<string, ChatResponse[]>();
+        let total = 0, page = 1, limit = 0, hasMore = false;
+        paginatedData.forEach(pageData => {
+            if (!pageData) return;
+            pageData.chats.forEach((chats, section) => {
+                if (!mergedChats.has(section)) {
+                    mergedChats.set(section, []);
+                }
+                mergedChats.get(section)!.push(...chats);
+            });
+            total = pageData.total;
+            page = pageData.page;
+            limit = pageData.limit;
+            hasMore = pageData.hasMore;
+        });
+        // Resort sections: pinned first, then by date
+        const sortedSections = new Map(
+            [...mergedChats.entries()].sort((a, b) => {
+                if (a[0] === PINNED_SECTION) return -1;
+                if (b[0] === PINNED_SECTION) return 1;
+                const aDate = a[1][0]?.createdAt ?? Date.now();
+                const bDate = b[1][0]?.createdAt ?? Date.now();
+                return bDate - aDate;
+            })
+        );
+        return { chats: sortedSections, total, page, limit, hasMore };
+    }, [paginatedData]);
 
     const [hidden, setHidden] = useState(hiddenOuter);
     // [[sectionIndex, chatIndex], movementDirection]
@@ -139,11 +181,21 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     useEffect(() => {
         setHidden(hiddenOuter);
         if (!hiddenOuter) {
-            mutate(data, { optimisticData: data, revalidate: true });
+            mutate(paginatedData, { optimisticData: paginatedData, revalidate: true });
         }
-    }, [hiddenOuter, data, mutate]);
+    }, [hiddenOuter, paginatedData, mutate]);
 
-    const keyboardShortcutHandler = useCallback((e: KeyboardEvent) => {
+    useEffect(() => {
+        if (inView && !isValidating && !loadingMore && data?.hasMore) {
+            setLoadingMore(true);
+            setSize((prevSize) => prevSize + 1).finally(() => {
+                setLoadingMore(false);
+            });
+            console.log("Loading more chats...");
+        }
+    }, [inView, isValidating, loadingMore, setSize, data?.hasMore]);
+
+    const keyboardShortcutHandler = useCallback(async (e: KeyboardEvent) => {
         const key = e.key as Key;
 
         // Movement shortcuts
@@ -223,9 +275,16 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 if (nextIndex >= sectionLength) {
                     nextSectionIndex = currentSectionIndex + 1;
                     if (nextSectionIndex >= sectionKeys.length) {
-                        nextSectionIndex = 0;
-                        nextIndex = 0;
-                        hasWrappedAround = true;
+                        // Don't wrap around if we're loading more data or if there's more data to load
+                        if (loadingMore || data?.hasMore) {
+                            nextSectionIndex = sectionKeys.length - 1;
+                            nextIndex = sectionLength - 1;
+                            hasWrappedAround = false;
+                        } else {
+                            nextSectionIndex = 0;
+                            nextIndex = 0;
+                            hasWrappedAround = true;
+                        }
                     } else {
                         nextIndex = 0;
                     }
@@ -259,6 +318,23 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             }
 
             setSelected([[nextSectionIndex, nextIndex], !hasWrappedAround ? -1 : 1]);
+
+            // Preemptive loading when approaching the end
+            if (!loadingMore && data?.hasMore && !hasWrappedAround) {
+                const totalItems = Array.from(filteredChats.values()).reduce((sum, chats) => sum + chats.length, 0);
+                const currentFlatIndex = Array.from(filteredChats.entries())
+                    .slice(0, nextSectionIndex)
+                    .reduce((sum, [_, chats]) => sum + chats.length, 0) + nextIndex;
+
+                // Load more when within 5 items of the end
+                if (totalItems - currentFlatIndex <= 5) {
+                    console.log("Preemptively loading more chats...");
+                    setLoadingMore(true);
+                    setSize((prevSize) => prevSize + 1).finally(() => {
+                        setLoadingMore(false);
+                    });
+                }
+            }
         }
         if (!e.altKey && !e.shiftKey && !e.metaKey && (key === "Home" || (e.ctrlKey && key === "ArrowUp"))) {
             e.preventDefault();
@@ -304,6 +380,13 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 return;
             }
 
+            if (renamingId) {
+                // If renaming is active, cancel renaming
+                setRenamingId(null);
+                setNewChatTitle(null);
+                return;
+            }
+
             onDismiss();
             return;
         }
@@ -333,6 +416,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         });
                     }
                 }
+                return;
             }
 
             if (pendingDeleteId) {
@@ -353,6 +437,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (!chat) return;
 
             openTab(chat);
+            return;
+        }
+
+        if (e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey && key === "Enter") {
+            if (searchQuery.trim() === "") return;
+            e.preventDefault();
+            e.stopPropagation();
+            await createChatFromSearch();
             return;
         }
 
@@ -404,7 +496,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (!chat) return;
             setRenamingId(chat.id);
         }
-    }, [onDismiss, selected, bulkDeleteMode, bulkSelectedChatIds.size, filteredChats, deletingId, pendingDeleteId, renamingId, mutate, isTouchDevice]);
+    }, [onDismiss, selected, bulkDeleteMode, bulkSelectedChatIds.size, filteredChats, deletingId, pendingDeleteId, renamingId, data?.hasMore, loadingMore, searchQuery, setSize]);
 
     useEffect(() => {
         if (hidden) {
@@ -494,11 +586,42 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             label: chat.label ?? "New Tab",
             link: `/chat/${chat.id}`
         });
-        router.push(`/chat/${chat.id}`);
-        setTimeout(() => {
-            onDismiss();
-        }, 25); // Delay to allow navigation to start
+        onDismiss();
+        startTransition(() => {
+            router.push(`/chat/${chat.id}`);
+        });
     }
+
+    const createChatFromSearch = useCallback(async () => {
+        if (!searchQuery.trim()) return;
+        onDismiss();
+        setTimeout(() => {
+            setSearchQuery("");
+        }, 200);
+
+        // If shift + enter is pressed, create a new chat with the search query as title
+        const chat = await fetch("/api/chat", {
+            method: "POST",
+            body: JSON.stringify({
+                model: "google/gemini-2.5-flash", // this should prolly not be hardcoded
+                provider: "openrouter",
+            } as CreateChatRequest),
+        }).then(res => res.json() as Promise<CreateChatResponse | ApiError>)
+            .catch(() => undefined);
+        if (!chat || "error" in chat) {
+            return;
+        }
+
+        sessionStorage.setItem("temp-new-tab-msg", JSON.stringify({ message: searchQuery.trim(), tabId: chat.id }));
+        addAndSaveTabsLocally(localStorage, {
+            id: chat.id,
+            link: `/chat/${chat.id}`
+        });
+
+        startTransition(() => {
+            router.push(`/chat/${chat.id}`);
+        });
+    }, [searchQuery, onDismiss, router]);
 
     function onChatClick(e: React.MouseEvent<HTMLLIElement, MouseEvent>, chat: ChatResponse) {
         if (renamingId === chat.id) return;
@@ -675,7 +798,16 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             }
         }
 
-        mutate({ ...data, chats: newChatsMap }, false);
+        mutate((pages) => {
+            if (!pages) return pages;
+            // Update the first page's chats (or whichever page contains the updated chat)
+            return pages.map((page, idx) => {
+                if (idx === 0 && page) {
+                    return { ...page, chats: newChatsMap };
+                }
+                return page;
+            });
+        }, false);
 
         await fetch(`/api/chat/${chatId}`, {
             method: "POST",
@@ -711,25 +843,42 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                mutate(currentData => {
-                    if (!currentData) return currentData;
+                mutate((pages) => {
+                    if (!pages) return pages;
+                    // Merge all pages' chats into a single Map
+                    const mergedChats = new Map<string, ChatResponse[]>();
+                    let total = 0, page = 1, limit = 0, hasMore = false;
+                    pages.forEach(pageData => {
+                        if (!pageData) return;
+                        pageData.chats.forEach((chats, section) => {
+                            if (!mergedChats.has(section)) {
+                                mergedChats.set(section, []);
+                            }
+                            mergedChats.get(section)!.push(...chats);
+                        });
+                        total = pageData.total;
+                        page = pageData.page;
+                        limit = pageData.limit;
+                        hasMore = pageData.hasMore;
+                    });
+
                     // Remove deleted chats from all sections
-                    const updatedChats = new Map(currentData.chats);
-                    for (const [section, chats] of updatedChats.entries()) {
+                    for (const [section, chats] of mergedChats.entries()) {
                         const filtered = chats.filter(c => !chatIdsToDelete.includes(c.id));
                         if (filtered.length === 0) {
-                            updatedChats.delete(section);
+                            mergedChats.delete(section);
                         } else {
-                            updatedChats.set(section, filtered);
+                            mergedChats.set(section, filtered);
                         }
                     }
+
                     // Move selection if needed
                     let [sectionIdx, chatIdx] = selected[0];
-                    const sectionKeys = Array.from(updatedChats.keys());
+                    const sectionKeys = Array.from(mergedChats.keys());
                     if (
                         sectionIdx >= sectionKeys.length ||
                         (sectionKeys[sectionIdx] &&
-                            !(updatedChats.get(sectionKeys[sectionIdx])?.[chatIdx]))
+                            !(mergedChats.get(sectionKeys[sectionIdx])?.[chatIdx]))
                     ) {
                         // Move to first available chat
                         sectionIdx = 0;
@@ -737,15 +886,21 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     }
                     setSelected([[sectionIdx, chatIdx], 0]);
                     // Dismiss palette if no chats left
-                    const totalChats = Array.from(updatedChats.values()).reduce((acc, arr) => acc + arr.length, 0);
+                    const totalChats = Array.from(mergedChats.values()).reduce((acc, arr) => acc + arr.length, 0);
                     if (totalChats === 0) {
                         setTimeout(() => onDismiss(), 0);
                     }
-                    return { ...currentData, chats: updatedChats };
+
+                    // Return updated pages (update first page, keep others as is)
+                    return pages.map((page, idx) => {
+                        if (idx === 0 && page) {
+                            return { ...page, chats: mergedChats };
+                        }
+                        return page;
+                    });
                 }, false);
 
                 setDeletingId(null);
-                mutate(); // revalidate SWR
             } catch (error) {
                 console.error("Failed to delete chats:", error);
                 setDeletingId(null);
@@ -782,45 +937,66 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 return;
             }
 
-            mutate(currentData => {
-                if (!currentData) return currentData;
+            mutate((pages) => {
+                if (!pages) return pages;
+                // Merge all pages' chats into a single Map
+                const mergedChats = new Map<string, ChatResponse[]>();
+                pages.forEach(pageData => {
+                    if (!pageData) return;
+                    pageData.chats.forEach((chats, section) => {
+                        if (!mergedChats.has(section)) {
+                            mergedChats.set(section, []);
+                        }
+                        mergedChats.get(section)!.push(...chats);
+                    });
+                });
+
                 // Remove chat from the correct section
-                const updatedChats = new Map(currentData.chats);
                 if (sectionKey) {
-                    const chats = updatedChats.get(sectionKey) || [];
+                    const chats = mergedChats.get(sectionKey) || [];
                     chats.splice(chatIdx, 1);
                     if (chats.length === 0) {
-                        updatedChats.delete(sectionKey);
+                        mergedChats.delete(sectionKey);
                     } else {
-                        updatedChats.set(sectionKey, chats);
+                        mergedChats.set(sectionKey, chats);
                     }
                 }
+
                 // Move selection if needed
                 if (
                     sectionIdx === selected[0][0] &&
                     chatIdx === selected[0][1]
                 ) {
                     // If last chat in section, move up, else stay at same index
-                    const chatsInSection = updatedChats.get(sectionKey || "") || [];
+                    const chatsInSection = mergedChats.get(sectionKey || "") || [];
                     let newSectionIdx = sectionIdx;
                     let newChatIdx = selected[0][1];
+                    const mergedSectionKeys = Array.from(mergedChats.keys());
                     if (newChatIdx >= chatsInSection.length) {
                         newChatIdx = chatsInSection.length - 1;
-                        if (newChatIdx < 0 && sectionKeys.length > 1) {
+                        if (newChatIdx < 0 && mergedSectionKeys.length > 1) {
                             // Move to previous section if exists
                             newSectionIdx = Math.max(0, sectionIdx - 1);
-                            const prevSectionChats = updatedChats.get(sectionKeys[newSectionIdx]) || [];
+                            const prevSectionChats = mergedChats.get(mergedSectionKeys[newSectionIdx]) || [];
                             newChatIdx = prevSectionChats.length - 1;
                         }
                     }
                     setSelected([[Math.max(0, newSectionIdx), Math.max(0, newChatIdx)], 0]);
                 }
+
                 // Dismiss palette if this was the last chat
-                const totalChats = Array.from(updatedChats.values()).reduce((acc, arr) => acc + arr.length, 0);
+                const totalChats = Array.from(mergedChats.values()).reduce((acc, arr) => acc + arr.length, 0);
                 if (totalChats === 0) {
                     setTimeout(() => onDismiss(), 0);
                 }
-                return { ...currentData, chats: updatedChats };
+
+                // Return updated pages (update first page, keep others as is)
+                return pages.map((page, idx) => {
+                    if (idx === 0 && page) {
+                        return { ...page, chats: mergedChats };
+                    }
+                    return page;
+                });
             }, false);
 
             setDeletingId(null);
@@ -850,11 +1026,37 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                         </svg>
                     </div>
                     <div className="relative w-full">
-                        <label htmlFor="search" hidden={!searchRef} className="text-neutral-300/60 left-0 absolute pointer-events-none" autoCorrect="off">
-                            Search your chats...
+                        <label htmlFor="search" hidden={searchQuery !== ""} className="text-neutral-300/60 left-0 absolute pointer-events-none" autoCorrect="off">
+                            Search your chats or press Shift+Enter to start a new one...
                         </label>
-                        <input ref={searchRef} onInput={(e) => setSearchQuery(e.currentTarget.value)} id="search" className="w-full outline-none text-neutral-50/80" />
+                        <input ref={searchRef} onInput={(e) => setSearchQuery(e.currentTarget.value)} value={searchQuery} autoFocus={!isTouchDevice} id="search" className="w-full outline-none text-neutral-50/80" />
                     </div>
+                    <button
+                        onClick={async () => {
+                            await createChatFromSearch();
+                            return;
+                        }}
+                        disabled={searchQuery.trim() === ""}
+                        className="
+                            bg-primary backdrop-blur-xl z-10 px-3 h-8 rounded-xl
+                            min-w-fit flex items-center text-sm text-white hover:bg-primary/75 cursor-pointer
+                            transition-all duration-200
+                            disabled:bg-primary/50 disabled:text-white/50 disabled:cursor-not-allowed
+                        "
+                        style={{
+                            opacity: searchQuery === "" ? 0 : 1,
+                            pointerEvents: searchQuery === "" ? "none" : "auto",
+                            scale: searchQuery === "" ? 0.8 : 1,
+                            marginRight: searchQuery === "" ? "calc(-1 * var(--send-wdith, 0px))" : "0",
+                        }}
+                        ref={el => {
+                            if (el) {
+                                el.style.setProperty("--send-width", `${el.clientWidth + 12}px`);
+                            }
+                        }}
+                    >
+                        Send
+                    </button>
                     {!isTouchDevice && (
                         <span className="bg-white/10 backdrop-blur-xl z-10 px-3 h-8 rounded-xl min-w-fit flex items-center text-sm text-neutral-200/65">
                             {chatPaletteShortcut}
@@ -915,16 +1117,27 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 style={{ top: `var(--top-pos, 0px)`, height: 64 }}
                             />
                         )}
-                        {filteredChats.size === 0 && !isLoading && !isLoadingMore && (
+                        {filteredChats.size === 0 && !isLoading && !isValidating && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
-                                <span>No chats found.</span>
+                                <span className="line-clamp-1 truncate">
+                                    No chats found — create one by typing
+                                </span>
                             </li>
                         )}
-                        {isLoading && !isLoadingMore && (
+                        {isLoading && !isValidating && (
                             <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
                                 <span>Loading... please wait</span>
                             </li>
                         )}
+                        <li
+                            className="section px-4 pb-2 pt-2.5 text-xs text-primary-light font-semibold select-none absolute right-2 transition-all duration-200"
+                            style={{
+                                opacity: searchQuery === "" ? 0 : 1,
+                                scale: searchQuery === "" ? 0.8 : 1,
+                            }}
+                        >
+                            Shift + Enter to start a new chat
+                        </li>
                         {filteredChats.entries().toArray().map((value, sectionIdx) => {
                             let totalSectionsLength = 0;
                             filteredChats.entries().toArray().forEach((entry, idx) => {
@@ -987,90 +1200,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         return nextIsSelected ? "!rounded-t-2xl !rounded-b-none" : "";
                                                     })()}
                                                 `}
-                                                // onTouchStart={e => {
-                                                //     if (!isTouchDevice) return;
-                                                //     if (renamingId === chat.id) return;
-
-                                                //     // Check if it's a nested button
-                                                //     const target = e.target as HTMLElement;
-                                                //     if (isNestedButton(target)) return;
-
-                                                //     touchStartRef.current = {
-                                                //         chatId: chat.id,
-                                                //         startTime: Date.now()
-                                                //     };
-
-                                                //     // Start long press timer (500ms)
-                                                //     touchTimeoutRef.current = setTimeout(() => {
-                                                //         if (touchStartRef.current?.chatId === chat.id) {
-                                                //             // Add long press animation
-                                                //             setLongPressActive(chat.id);
-
-                                                //             // Trigger haptic feedback if available
-                                                //             if ("vibrate" in navigator) {
-                                                //                 navigator.vibrate(50);
-                                                //             }
-
-                                                //             // Enter bulk mode and select this chat
-                                                //             setBulkDeleteMode(true);
-                                                //             setSelectedChatIds(prev => {
-                                                //                 const newSet = new Set(prev);
-                                                //                 newSet.add(chat.id);
-                                                //                 return newSet;
-                                                //             });
-
-                                                //             // Remove animation after it completes
-                                                //             setTimeout(() => setLongPressActive(null), 500);
-
-                                                //             touchStartRef.current = null;
-                                                //         }
-                                                //     }, 500);
-                                                // }}
-                                                // onTouchEnd={_ => {
-                                                //     if (!isTouchDevice) return;
-                                                //     if (renamingId === chat.id) return;
-
-                                                //     if (touchTimeoutRef.current) {
-                                                //         clearTimeout(touchTimeoutRef.current);
-                                                //         touchTimeoutRef.current = null;
-                                                //     }
-
-                                                //     setLongPressActive(null);
-
-                                                //     // If we're in bulk mode, handle tap as selection toggle
-                                                //     if (bulkDeleteMode && touchStartRef.current) {
-                                                //         const touchDuration = Date.now() - touchStartRef.current.startTime;
-                                                //         if (touchDuration < 500) {
-                                                //             setSelectedChatIds(prev => {
-                                                //                 const newSet = new Set(prev);
-                                                //                 if (newSet.has(chat.id)) {
-                                                //                     newSet.delete(chat.id);
-                                                //                 } else {
-                                                //                     newSet.add(chat.id);
-                                                //                 }
-                                                //                 return newSet;
-                                                //             });
-                                                //         }
-                                                //     }
-                                                //     // If touch was released quickly and we're not in bulk mode, it's a tap
-                                                //     else if (touchStartRef.current && !bulkDeleteMode) {
-                                                //         const touchDuration = Date.now() - touchStartRef.current.startTime;
-                                                //         if (touchDuration < 500) {
-                                                //             createTab(chat);
-                                                //         }
-                                                //     }
-
-                                                //     touchStartRef.current = null;
-                                                // }}
-                                                // onTouchMove={_ => {
-                                                //     // Cancel long press if user moves finger
-                                                //     if (touchTimeoutRef.current) {
-                                                //         clearTimeout(touchTimeoutRef.current);
-                                                //         touchTimeoutRef.current = null;
-                                                //     }
-                                                //     setLongPressActive(null);
-                                                //     touchStartRef.current = null;
-                                                // }}
                                                 onClick={e => onChatClick(e, chat)}
                                             >
                                                 <ChatItem
@@ -1091,49 +1220,80 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     onRename={(newLabel, id, idx) => {
                                                         setRenamingId(null);
                                                         setNewChatTitle(null);
-                                                        mutate(async data => {
-                                                            if (!data) return data;
+                                                        mutate(async pages => {
+                                                            if (!pages) return pages;
+                                                            // Merge all pages' chats into a single Map
+                                                            const mergedChats = new Map<string, ChatResponse[]>();
+                                                            pages.forEach(pageData => {
+                                                                if (!pageData) return;
+                                                                pageData.chats.forEach((chats, section) => {
+                                                                    if (!mergedChats.has(section)) {
+                                                                        mergedChats.set(section, []);
+                                                                    }
+                                                                    mergedChats.get(section)!.push(...chats);
+                                                                });
+                                                            });
+
+                                                            // Update the chat label in the merged map
+                                                            const sectionChats = mergedChats.get(value[0]) || [];
+                                                            const chatToUpdate = sectionChats.find(c => c.id === id);
+                                                            if (chatToUpdate) {
+                                                                chatToUpdate.label = newLabel;
+                                                                sectionChats[idx].label = newLabel;
+                                                                mergedChats.set(value[0], sectionChats);
+                                                            }
+
+                                                            // Persist to server
                                                             const result = await fetch(`/api/chat/${id}`, {
                                                                 method: "POST",
                                                                 body: JSON.stringify({ label: newLabel }),
                                                             }).then(res => res.json()).catch(err => {
                                                                 console.error(err);
-                                                                return null; // If error, return current data
+                                                                return null;
                                                             });
                                                             if (!result || "error" in result) {
                                                                 console.error("Failed to rename chat:", result?.error || "Unknown error");
-                                                                return data; // If error, return current data
+                                                                return pages;
                                                             }
 
-                                                            const updatedChats = new Map(data.chats);
-                                                            const sectionChats = updatedChats.get(value[0]) || [];
-                                                            const chatToUpdate = sectionChats.find(c => c.id === id);
-                                                            if (chatToUpdate) {
-                                                                chatToUpdate.label = newLabel;
-                                                                sectionChats[idx].label = newLabel; // Update the local copy for immediate UI update
-                                                                updatedChats.set(value[0], sectionChats);
-                                                                return { ...data, chats: updatedChats };
-                                                            }
-                                                            return data;
+                                                            // Return updated pages (update first page, keep others as is)
+                                                            return pages.map((page, idx) => {
+                                                                if (idx === 0 && page) {
+                                                                    return { ...page, chats: mergedChats };
+                                                                }
+                                                                return page;
+                                                            });
                                                         }, {
-                                                            optimisticData(currentData, displayedData) {
-                                                                if (!currentData) return displayedData ?? {
-                                                                    chats: new Map(),
-                                                                    total: 0,
-                                                                    page: 1,
-                                                                    limit: 0,
-                                                                    hasMore: false,
-                                                                };
-                                                                const updatedChats = new Map(currentData.chats);
-                                                                const sectionChats = updatedChats.get(value[0]) || [];
+                                                            optimisticData(currentPages, displayedPages) {
+                                                                if (!currentPages) return displayedPages ?? [];
+                                                                // Merge all pages' chats into a single Map
+                                                                const mergedChats = new Map<string, ChatResponse[]>();
+                                                                currentPages.forEach(pageData => {
+                                                                    if (!pageData) return;
+                                                                    pageData.chats.forEach((chats, section) => {
+                                                                        if (!mergedChats.has(section)) {
+                                                                            mergedChats.set(section, []);
+                                                                        }
+                                                                        mergedChats.get(section)!.push(...chats);
+                                                                    });
+                                                                });
+
+                                                                // Update the chat label in the merged map
+                                                                const sectionChats = mergedChats.get(value[0]) || [];
                                                                 const chatToUpdate = sectionChats.find(c => c.id === id);
                                                                 if (chatToUpdate) {
                                                                     chatToUpdate.label = newLabel;
-                                                                    sectionChats[idx].label = newLabel; // Update the local copy for immediate UI update
-                                                                    updatedChats.set(value[0], sectionChats);
-                                                                    return { ...currentData, chats: updatedChats };
+                                                                    sectionChats[idx].label = newLabel;
+                                                                    mergedChats.set(value[0], sectionChats);
                                                                 }
-                                                                return currentData;
+
+                                                                // Return updated pages (update first page, keep others as is)
+                                                                return currentPages.map((page, idx) => {
+                                                                    if (idx === 0 && page) {
+                                                                        return { ...page, chats: mergedChats };
+                                                                    }
+                                                                    return page;
+                                                                });
                                                             },
                                                             revalidate: true,
                                                         });
@@ -1157,11 +1317,15 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 </React.Fragment>
                             )
                         })}
-                        {/* {isLoadingMore && (
-                            <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center">
-                                <span>Loading more...</span>
+                        {/* Intersection observer element for pagination */}
+                        {data?.hasMore && !isLoading && (
+                            <li ref={ref} className="h-2 w-full pointer-events-none" />
+                        )}
+                        {loadingMore && (
+                            <li className="p-4 px-5.5 flex gap-4 min-h-[64px] items-center justify-center">
+                                <span className="text-neutral-400 text-sm">Loading more chats...</span>
                             </li>
-                        )} */}
+                        )}
                     </ul>
                 </div>
             </div >

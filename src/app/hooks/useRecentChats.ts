@@ -14,7 +14,7 @@ export function useRecentChats(count: number = 4) {
     async function fetchChats() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/chat?page=1&limit=${count}`);
+        const res = await fetch(`/api/chat?page=1&limit=${count}`, );
         const data = await res.json();
         if (!data.chats || !Array.isArray(data.chats)) {
           setChats([]);

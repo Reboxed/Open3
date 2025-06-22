@@ -96,8 +96,8 @@ blockquote>blockquote {
 }
 
 *:not(pre)>code {
-    @apply bg-black/10 shadow-inactive-button;
-    @apply py-1 px-2 rounded-lg;
+    @apply bg-white/20 shadow-inactive-button;
+    @apply py-1 px-2 rounded-lg mx-1;
 }
 
 *:not(pre):has(>code) {
