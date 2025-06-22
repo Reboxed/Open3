@@ -72,11 +72,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const { data: paginatedData, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite((pageIndex: number, previousPageData) => {
         if (previousPageData && !previousPageData.hasMore) return null; // No more pages to load
         const page = pageIndex + 1;
-<<<<<<< HEAD
         return `/api/chat?page=${page}`; // Adjust limit as needed
-=======
-        return `/api/chat?page=${page}&limit=10`; // Adjust limit as needed
->>>>>>> f259c4f0876ea7b172173da518ef075d2e8e619d
     }, async (url: string) => {
         const res = await fetch(url, {
             cache: "no-cache",
