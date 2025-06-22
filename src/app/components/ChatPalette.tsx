@@ -72,12 +72,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     const { data: paginatedData, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite((pageIndex: number, previousPageData) => {
         if (previousPageData && !previousPageData.hasMore) return null; // No more pages to load
         const page = pageIndex + 1;
-        return `/api/chat?page=${page}`; // Adjust limit as needed
+        return `/api/chat?page=${page}?limit=35`; // Adjust limit as needed
     }, async (url: string) => {
-        const res = await fetch(url, {
-            cache: "no-cache",
-            next: { revalidate: 0 },
-        });
+        const res = await fetch(url);
         if (!res.ok) {
             try {
                 const errorData = await res.json() as ApiError;
@@ -139,7 +136,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
 
     // Renaming
     const [renamingId, setRenamingId] = useState<string | null>(null);
-    const [newChatTitle, setNewChatTitle] = useState<string | null>(null);
     // Deleting
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const pendingDeleteTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -383,7 +379,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             if (renamingId) {
                 // If renaming is active, cancel renaming
                 setRenamingId(null);
-                setNewChatTitle(null);
                 return;
             }
 
@@ -502,7 +497,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         if (hidden) {
             lastSelectedRef.current = selected;
             setRenamingId(null);
-            setNewChatTitle(null);
             setBulkDeleteMode(false);
             setPendingDeleteId(null);
             setDeletingId(null);
@@ -1148,6 +1142,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                             return (
                                 <React.Fragment key={value[0]}>
                                     <li
+                                        key={value[0]}
                                         ref={el => { chatItemRefs.current[sectionIdx + totalSectionsLength] = el }}
                                         className="section px-4 pb-2 pt-2.5 text-xs text-neutral-400 font-semibold select-none"
                                     >
@@ -1215,11 +1210,9 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     deletingId={deletingId}
                                                     onRenameTrigger={id => {
                                                         setRenamingId(id);
-                                                        setNewChatTitle(null);
                                                     }}
                                                     onRename={(newLabel, id, idx) => {
                                                         setRenamingId(null);
-                                                        setNewChatTitle(null);
                                                         mutate(async pages => {
                                                             if (!pages) return pages;
                                                             // Merge all pages' chats into a single Map
@@ -1300,7 +1293,6 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                     }}
                                                     onRenameCancel={() => {
                                                         setRenamingId(null);
-                                                        setNewChatTitle(null);
                                                     }}
                                                     onDeleteTrigger={id => {
                                                         setPendingDeleteId(id);
