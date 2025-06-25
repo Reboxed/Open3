@@ -455,7 +455,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         if (isToday(date)) return "Today";
         if (isYesterday(date)) return "Yesterday";
         if (isThisWeek(date, { weekStartsOn: 1 })) return format(date, "EEEE"); // Weekday name
-        return formatRelative(date, "MM/dd/yyyy"); // Fallback to date
+        return format(date, "MM/dd/yyyy"); // Fallback to date
     }
 
     // Group chats into sections (memoized)
