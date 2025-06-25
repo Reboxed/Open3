@@ -126,7 +126,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                const chat = filteredChats[selected[0]];
                 if (chat && pendingDeleteId === chat.id && !deletingId) {
                     setPendingDeleteId("");
                     if (pendingDeleteTimeout.current) {
@@ -164,7 +164,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                // Use filteredChats for selection actions
+                const chat = filteredChats[selected[0]];
                 if (!chat) return;
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
@@ -185,7 +186,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     return;
                 }
 
-                const chat = localChats.chats[selected[0]];
+                const chat = filteredChats[selected[0]];
                 if (!chat) return;
                 if (pendingDeleteId === chat.id && !deletingId) {
                     if (pendingDeleteTimeout.current) {
@@ -567,7 +568,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
             >
                 .
             </div>
-            <div className={`fixed flex flex-col items-stretch gap-5 w-8/10 max-w-[1035px] left-1/2 top-1/2 -translate-1/2 z-25 ${hidden ? "pointer-events-none" : ""} transition-all duration-500 ease-in-out ${className}`}>
+            <div className={`fixed flex flex-col items-stretch gap-5 w-8/10 max-w-[1035px] max-h-8/10 max-sm:max-h-9/10 left-1/2 top-1/2 -translate-1/2 z-25 ${hidden ? "pointer-events-none" : ""} transition-all duration-500 ease-in-out ${className}`}>
                 <div
                     className={`
                     flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 items-center justify-stretch pr-5
@@ -619,13 +620,14 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                 )}
                 <div
                     className={`
-                    flex bg-[rgba(36,36,36,0.75)] items-center justify-stretch
+                    flex bg-[rgba(36,36,36,0.75)] items-stretch justify-stretch
                     backdrop-blur-2xl shadow-highlight rounded-2xl
                     transition-all duration-250 relative
+                    min-h-0 flex-1
                     ${hidden ? "!bg-[rgba(36,36,36,0)] !backdrop-blur-none opacity-0" : ""}
                 `}
                 >
-                    <ul ref={listRef} className="flex flex-col items-stretch justify-stretch w-full max-h-[calc(5*64px)] overflow-y-auto overflow-x-clip transition-all duration-200 relative">
+                    <ul ref={listRef} className="flex flex-col items-stretch justify-stretch w-full mim-h-0 flex-1 overflow-y-auto overflow-x-clip transition-all duration-200 relative">
                         {!bulkDeleteMode && !isTouchDevice && (
                             <div
                                 ref={selectedRef}
@@ -643,12 +645,12 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                 <span>Loading... please wait</span>
                             </li>
                         )}
-                        {chatsWithSections.map((section, sectionIdx) => (
+                        {chatsWithSections.map((section, _) => (
                             <React.Fragment key={section.section}>
                                 <li className="px-4 py-2 text-xs text-neutral-400 font-semibold select-none">
                                     {section.section}
                                 </li>
-                                {section.chats.map((chat, idxInSection) => {
+                                {section.chats.map((chat, _) => {
                                     // Flat index in filteredChats
                                     const flatIdx = filteredChats.findIndex(c => c.id === chat.id);
                                     const isSelected = selectedChatIds.has(chat.id);
