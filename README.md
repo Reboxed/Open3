@@ -4,7 +4,7 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 
 If you want or for help, join our [Discord](https://discord.gg/xsBn7D9n6K).
 
-## Important for Cloneathon judges
+## ⚠️ Important for Cloneathon judges ⚠️
 ### I added the following feature within the additional 24 hour period given to update our submissions.
 
 **Web Search:** If you want to judge without it then pull the commit [`559d501`](https://github.com/Reboxed/Open3/tree/559d50181aacf4a8ec0cad8f6655b84bdf7c27aa) instead.
