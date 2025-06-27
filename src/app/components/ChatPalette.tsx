@@ -1011,10 +1011,10 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
     return (
         <>
             <div
-                className={`z-25 bg-black/15 absolute left-0 right-0 top-0 bottom-0 select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-300`}
+                className={`z-75 bg-black/15 absolute left-0 right-0 top-0 bottom-0 select-none ${hidden ? "pointer-events-none opacity-0" : "opacity-100"} backdrop-blur-xs transition-opacity duration-300`}
                 onClick={() => onDismiss()}
             />
-            <div className={`fixed z-50 flex flex-col items-stretch gap-5 w-8/10 max-w-[1035px] max-h-8/10 max-sm:max-h-9/10 left-1/2 top-1/2 -translate-1/2 ${hidden ? "pointer-events-none" : ""} transition-all duration-500 ease-in-out ${className}`}>
+            <div className={`fixed z-80 flex flex-col items-stretch gap-5 w-8/10 max-w-[1035px] max-h-8/10 max-sm:max-h-9/10 max-sm:w-9/10 left-1/2 top-1/2 -translate-1/2 ${hidden ? "pointer-events-none" : ""} transition-all duration-500 ease-in-out ${className}`}>
                 <div
                     className={`
                     flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 items-center justify-stretch pr-5
@@ -1031,7 +1031,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     </div>
                     <div className="relative w-full">
                         <label htmlFor="search" hidden={searchQuery !== ""} className="text-neutral-300/60 left-0 absolute pointer-events-none" autoCorrect="off">
-                            Search your chats or press Shift+Enter to start a new one...
+                            Search your chats{!isTouchDevice && "or press Shift+Enter to start a new one"}...
                         </label>
                         <input ref={searchRef} onInput={(e) => setSearchQuery(e.currentTarget.value)} value={searchQuery} autoFocus={!isTouchDevice} id="search" className="w-full outline-none text-neutral-50/80" />
                     </div>
@@ -1068,7 +1068,7 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     )}
                 </div>
                 <div
-                    className="flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 -z-5 items-center justify-between backdrop-blur-2xl shadow-highlight rounded-2xl transition-all duration-250"
+                    className="flex bg-[rgba(36,36,36,0.75)] gap-3 p-4 -z-5 items-center justify-between backdrop-blur-2xl shadow-highlight rounded-2xl transition-all duration-250 flex-wrap"
                     style={{
                         opacity: bulkDeleteMode ? 1 : 0,
                         pointerEvents: bulkDeleteMode ? "auto" : "none",
@@ -1083,23 +1083,23 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                     <div className="text-neutral-300/80 text-sm">
                         {bulkSelectedChatIds.size} chat{bulkSelectedChatIds.size !== 1 ? "s" : ""} selected
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-3 max-sm:w-full">
                         <button
                             onClick={() => {
                                 setBulkDeleteMode(false);
                                 setSelectedChatIds(new Set());
                                 lastSelectedBulkChatRef.current = null;
                             }}
-                            className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-xl text-sm text-neutral-200/80 hover:bg-white/20 transition-all duration-200 cursor-pointer"
+                            className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-xl text-sm text-neutral-200/80 hover:bg-white/20 transition-all duration-200 cursor-pointer max-sm:w-full"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleBulkDelete}
                             disabled={bulkSelectedChatIds.size === 0}
-                            className="bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed px-4 py-2 rounded-xl text-sm text-white transition-all duration-200 cursor-pointer"
+                            className="bg-red-500/50 hover:bg-red-600 disabled:bg-red-500 disabled:cursor-not-allowed px-4 py-2 rounded-xl text-sm text-white transition-all duration-200 cursor-pointer max-sm:w-full"
                         >
-                            Delete Selected
+                            Delete all
                         </button>
                     </div>
                 </div>
@@ -1171,12 +1171,8 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                 key={chat.id}
                                                 ref={el => { chatItemRefs.current[(sectionIdx + totalSectionsLength + 1) + chatIdx] = el }}
                                                 className={`
-                                                    p-4 h-[64px] flex gap-4 items-center text-neutral-50/80 w-full cursor-pointer
-                                                    ${isBulkSelected ?
-                                                        "bg-blue-500/15" :
-                                                        !isSelected ? "hover:bg-white/[0.03]" :
-                                                            ""
-                                                    }
+                                                    p-4 h-[64px] flex gap-4 max-sm:gap-3 items-center text-neutral-50/80 w-full cursor-pointer justify-center
+                                                    ${isBulkSelected ? "bg-blue-500/15" : !isSelected ? "hover:bg-white/[0.03]" : "" }
                                                     transition-all duration-200 overflow-clip
                                                     ${isDeleting ? "chat-delete-anim" : ""}
                                                     ${isLongPressing ? "chat-long-press" : ""}
@@ -1205,19 +1201,111 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
                                                         return nextIsSelected ? "!rounded-t-2xl !rounded-b-none" : "";
                                                     })()}
                                                 `}
-                                                onClick={e => onChatClick(e, chat)}
+                                                onTouchStart={e => {
+                                                    if (!isTouchDevice) return;
+                                                    if (renamingId === chat.id) return;
+
+                                                    const target = e.target as HTMLElement;
+                                                    if (
+                                                        target.classList.contains("child-button") ||
+                                                        target.parentElement?.classList?.contains("child-button") ||
+                                                        target.parentElement?.parentElement?.classList?.contains("child-button")
+                                                    ) return;
+
+                                                    touchStartRef.current = {
+                                                        chatId: chat.id,
+                                                        startTime: Date.now()
+                                                    };
+
+                                                    // Start long press timer
+                                                    touchTimeoutRef.current = setTimeout(() => {
+                                                        if (touchStartRef.current?.chatId === chat.id) {
+                                                            // Add long press animation
+                                                            setLongPressActive(chat.id);
+
+                                                            // Trigger haptic feedback if available
+                                                            if ("vibrate" in navigator) {
+                                                                navigator.vibrate(50);
+                                                            }
+
+                                                            // Enter bulk mode and select this chat
+                                                            setBulkDeleteMode(true);
+                                                            setSelectedChatIds(prev => {
+                                                                const newSet = new Set(prev);
+                                                                newSet.add(chat.id);
+                                                                return newSet;
+                                                            });
+
+                                                            // Remove animation after it completes
+                                                            setTimeout(() => setLongPressActive(null), 500);
+
+                                                            touchStartRef.current = null;
+                                                        }
+                                                    }, LONG_PRESS_DURATION);
+                                                }}
+                                                onTouchEnd={() => {
+                                                    if (!isTouchDevice) return;
+                                                    if (renamingId === chat.id) return;
+
+                                                    if (touchTimeoutRef.current) {
+                                                        clearTimeout(touchTimeoutRef.current);
+                                                        touchTimeoutRef.current = null;
+                                                    }
+
+                                                    setLongPressActive(null);
+
+                                                    // If we're in bulk mode, handle tap as selection toggle
+                                                    if (bulkDeleteMode && touchStartRef.current) {
+                                                        const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                                        if (touchDuration < LONG_PRESS_DURATION) {
+                                                            setSelectedChatIds(prev => {
+                                                                const newSet = new Set(prev);
+                                                                if (newSet.has(chat.id)) {
+                                                                    newSet.delete(chat.id);
+                                                                } else {
+                                                                    newSet.add(chat.id);
+                                                                }
+                                                                return newSet;
+                                                            });
+                                                        }
+                                                    }
+                                                    // If touch was released quickly and we're not in bulk mode, treat it as a tap
+                                                    else if (touchStartRef.current && !bulkDeleteMode) {
+                                                        const touchDuration = Date.now() - touchStartRef.current.startTime;
+                                                        if (touchDuration < LONG_PRESS_DURATION) {
+                                                            openTab(chat);
+                                                        }
+                                                    }
+
+                                                    touchStartRef.current = null;
+                                                }}
+                                                onTouchMove={() => {
+                                                    // Cancel long press if user moves finger
+                                                    if (touchTimeoutRef.current) {
+                                                        clearTimeout(touchTimeoutRef.current);
+                                                        touchTimeoutRef.current = null;
+                                                    }
+                                                    setLongPressActive(null);
+                                                    touchStartRef.current = null;
+                                                }}
+                                                onClick={e => {
+                                                    // Skip click handling on touch devices to avoid conflicts
+                                                    if (isTouchDevice) return;
+                                                    onChatClick(e, chat);
+                                                }}
                                             >
                                                 <ChatItem
                                                     chat={chat}
                                                     idx={flatIdx}
                                                     section={value[0]}
-                                                    isSelected={isSelected}
+                                                    isSelected={isSelected && !isTouchDevice}
                                                     isBulkSelected={isBulkSelected}
                                                     bulkDeleteMode={bulkDeleteMode}
                                                     pendingDeleteId={pendingDeleteId}
                                                     onPinUpdate={handlePinChat}
                                                     renameId={renamingId}
                                                     deletingId={deletingId}
+                                                    isTouchDevice={isTouchDevice}
                                                     onRenameTrigger={id => {
                                                         setRenamingId(id);
                                                     }}
@@ -1334,4 +1422,3 @@ export default function ChatPalette({ className, hidden: hiddenOuter, onDismiss 
         </>
     );
 }
-

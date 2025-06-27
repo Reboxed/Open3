@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import "highlight.js/styles/github-dark.css"; // Change to preferred style
 import { ApiError, CreateChatRequest, CreateChatResponse } from "@/internal-lib/types/api";
 import { addAndSaveTabsLocally } from "./lib/utils/localStorageTabs";
-import { SignedIn, SignedOut, SignInButton, useClerk } from "@clerk/nextjs";
+import { SignedIn, SignedOut, useClerk } from "@clerk/nextjs";
 import { useRecentChats } from "./hooks/useRecentChats";
 
 export default function Home() {
@@ -146,4 +146,3 @@ export default function Home() {
         </div>
     );
 }
-
