@@ -54,6 +54,8 @@ Chat Palette<br/>
 
 Idk if I misunderstood it but if I did then I at least got you guys covered (I would've probably added web search either way, I loved working on this project).
 
+> 2. I made a small follow-up contribution which is of course not allowed, but I had no choice due to me having to deploy it. However, please consider pulling commit [`8fbd00f`](https://github.com/Reboxed/Open3/commit/8fbd00f92be7504f43bcbdc408ac517deb05a880), as that one was the last commit made within the 24-hour submission window. The only commit after that period was related to the web deployment and does not impact local builds or core functionality.
+
 ## Tech Stack
 
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS
