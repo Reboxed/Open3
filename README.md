@@ -4,15 +4,18 @@ Open3 is a modern, full-stack AI chat application inspired by platforms like Cha
 
 If you want or for help, join our [Discord](https://discord.gg/xsBn7D9n6K).
 
-### For the judges: I added the following within the additional 24 hour period for updating our submission
+## Important for Cloneathon judges
+### I added the following feature within the additional 24 hour period given to update our submissions.
 
-1. Web Search. If you want to judge without it then pull the commit [`559d501`](https://github.com/Reboxed/Open3/tree/559d50181aacf4a8ec0cad8f6655b84bdf7c27aa) instead.
+**Web Search:** If you want to judge without it then pull the commit [`559d501`](https://github.com/Reboxed/Open3/tree/559d50181aacf4a8ec0cad8f6655b84bdf7c27aa) instead.
 
 <img width="927" alt="image" src="https://github.com/user-attachments/assets/8648aa1e-8a39-46e9-b64d-617ce81d1258" />
 
-Idk if I misunderstood it but if I did then I at least got you guys covered (I would've probably added web search either way, I loved working on this project).
+> _I might've misunderstood that but if I did then I at least got you guys covered (I would've probably added web search either way, I loved working on this project)._
 
-> 2. I made a small follow-up contribution which is of course not allowed, but I had no choice due to me having to deploy it. However, please consider pulling commit [`8fbd00f`](https://github.com/Reboxed/Open3/commit/8fbd00f92be7504f43bcbdc408ac517deb05a880), as that one was the last commit made within the 24-hour submission window. The only commit after that period was related to the web deployment and does not impact local builds or core functionality.
+### Additionally,
+
+I made a small follow-up contribution which is of course not allowed, but I had no choice due to me having to deploy it. However, please consider pulling commit [`8fbd00f`](https://github.com/Reboxed/Open3/commit/8fbd00f92be7504f43bcbdc408ac517deb05a880), as that one was the last commit made within the 24-hour submission window. The only commit after that period was related to the web deployment and does not impact local builds or core functionality.
 
 ## Features
 
